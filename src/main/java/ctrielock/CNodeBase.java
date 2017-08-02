@@ -1,7 +1,4 @@
-package ctries2;
-
-
-
+package ctrielock;
 
 
 // TODO remove this - this is no longer the base class of CNode
