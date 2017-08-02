@@ -3,7 +3,8 @@ package ctrielock;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 public abstract class INodeBase<K, V> extends BasicNode {
-    
+
+    @Deprecated
     public static final AtomicReferenceFieldUpdater<INodeBase, MainNode> updater = AtomicReferenceFieldUpdater.newUpdater(
             INodeBase.class, MainNode.class, "mainnode");
     
@@ -16,9 +17,4 @@ public abstract class INodeBase<K, V> extends BasicNode {
     public INodeBase(Gen generation) {
 	gen = generation;
     }
-    
-    public BasicNode prev() {
-	return null;
-    }
-    
 }

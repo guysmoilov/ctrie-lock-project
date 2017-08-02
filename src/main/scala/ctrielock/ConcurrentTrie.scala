@@ -1,11 +1,11 @@
 package ctrielock
 
 import java.util.concurrent.atomic._
-import collection.Map
-import collection.mutable.ConcurrentMap
-import collection.immutable.ListMap
-import annotation.tailrec
-import annotation.switch
+
+import scala.annotation.tailrec
+import scala.collection.Map
+import scala.collection.immutable.ListMap
+import scala.collection.mutable.ConcurrentMap
 
 
 
@@ -15,50 +15,57 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends INodeBase[K, V](g) {
   WRITE(bn)
   
   def this(g: Gen) = this(null, g)
-  
+
+  @Deprecated
   @inline final def WRITE(nval: MainNode[K, V]) = INodeBase.updater.set(this, nval)
-  
+
+  @Deprecated
   @inline final def CAS(old: MainNode[K, V], n: MainNode[K, V]) = INodeBase.updater.compareAndSet(this, old, n)
-  
+
+  @Deprecated
   @inline final def GCAS_READ(ct: ConcurrentTrie[K, V]): MainNode[K, V] = {
     val m = /*READ*/mainnode
     val prevval = /*READ*/m.prev
     if (prevval eq null) m
     else GCAS_Complete(m, ct)
   }
-    
-  @tailrec private def GCAS_Complete(m: MainNode[K, V], ct: ConcurrentTrie[K, V]): MainNode[K, V] = if (m eq null) null else {
-    // complete the GCAS
-    val prev = /*READ*/m.prev
-    val ctr = ct.RDCSS_READ_ROOT(true)
-    
-    prev match {
-      case null =>
-        m
-      case fn: FailedNode[_, _] => // try to commit to previous value
-        if (CAS(m, fn.prev)) fn.prev
-        else GCAS_Complete(/*READ*/mainnode, ct)
-      case vn: MainNode[_, _] =>
-        // Assume that you've read the root from the generation G.
-        // Assume that the snapshot algorithm is correct.
-        // ==> you can only reach nodes in generations <= G.
-        // ==> `gen` is <= G.
-        // We know that `ctr.gen` is >= G.
-        // ==> if `ctr.gen` = `gen` then they are both equal to G.
-        // ==> otherwise, we know that either `ctr.gen` > G, `gen` < G,
-        //     or both
-        if ((ctr.gen eq gen) && ct.nonReadOnly) {
-          // try to commit
-          if (m.CAS_PREV(prev, null)) m
-          else GCAS_Complete(m, ct)
-        } else {
-          // try to abort
-          m.CAS_PREV(prev, new FailedNode(prev))
-          GCAS_Complete(/*READ*/mainnode, ct)
-        }
+
+  @Deprecated
+  @tailrec private def GCAS_Complete(m: MainNode[K, V], ct: ConcurrentTrie[K, V]): MainNode[K, V] =
+    if (m eq null) null
+    else {
+      // complete the GCAS
+      val prev = /*READ*/ m.prev
+      val ctr = ct.RDCSS_READ_ROOT(true)
+
+      prev match {
+        case null =>
+          m
+        case fn: FailedNode[_, _] => // try to commit to previous value
+          if (CAS(m, fn.prev)) fn.prev
+          else GCAS_Complete(/*READ*/ mainnode, ct)
+        case vn: MainNode[_, _] =>
+          // Assume that you've read the root from the generation G.
+          // Assume that the snapshot algorithm is correct.
+          // ==> you can only reach nodes in generations <= G.
+          // ==> `gen` is <= G.
+          // We know that `ctr.gen` is >= G.
+          // ==> if `ctr.gen` = `gen` then they are both equal to G.
+          // ==> otherwise, we know that either `ctr.gen` > G, `gen` < G,
+          //     or both
+          if ((ctr.gen eq gen) && ct.nonReadOnly) {
+            // try to commit
+            if (m.CAS_PREV(prev, null)) m
+            else GCAS_Complete(m, ct)
+          } else {
+            // try to abort
+            m.CAS_PREV(prev, new FailedNode(prev))
+            GCAS_Complete(/*READ*/ mainnode, ct)
+          }
+      }
     }
-  }
-  
+
+  @Deprecated
   @inline final def GCAS(old: MainNode[K, V], n: MainNode[K, V], ct: ConcurrentTrie[K, V]): Boolean = {
     n.WRITE_PREV(old)
     if (CAS(old, n)) {
@@ -66,7 +73,21 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends INodeBase[K, V](g) {
       /*READ*/n.prev eq null
     } else false
   }
-  
+
+  @inline final def GCAS_SYNC(old: MainNode[K, V], n: MainNode[K, V], ct: ConcurrentTrie[K, V]): Boolean = {
+    this.synchronized (
+      ct.root match {
+        case rootInode : INode[K,V] =>
+          if ((old eq mainnode) && (gen eq rootInode.gen)) {
+            mainnode = n
+            return true
+          }
+          else return false
+        case _ => throw new IllegalArgumentException // TODO: Make r always an indoe instead of AnyRef
+      }
+    )
+  }
+
   @inline private def inode(cn: MainNode[K, V]) = {
     val nin = new INode[K, V](gen)
     nin.WRITE(cn)
@@ -555,6 +576,7 @@ object CNode {
 }
 
 
+@Deprecated
 case class RDCSS_Descriptor[K, V](old: INode[K, V], expectedmain: MainNode[K, V], nv: INode[K, V]) {
   @volatile var committed = false
 }
@@ -564,7 +586,8 @@ class ConcurrentTrie[K, V] private (r: AnyRef, rtupd: AtomicReferenceFieldUpdate
 extends ConcurrentMap[K, V]
 {
   import ConcurrentTrie.computeHash
-  
+
+  @Deprecated
   private val rootupdater = rtupd
   @volatile var root = r
   
@@ -574,9 +597,11 @@ extends ConcurrentMap[K, V]
   )
   
   /* internal methods */
-  
+
+  @Deprecated
   @inline final def CAS_ROOT(ov: AnyRef, nv: AnyRef) = rootupdater.compareAndSet(this, ov, nv)
-  
+
+  @Deprecated
   @inline final def RDCSS_READ_ROOT(abort: Boolean = false): INode[K, V] = {
     val r = /*READ*/root
     r match {
@@ -584,7 +609,8 @@ extends ConcurrentMap[K, V]
       case desc: RDCSS_Descriptor[K, V] => RDCSS_Complete(abort)
     }
   }
-  
+
+  @Deprecated
   @tailrec private def RDCSS_Complete(abort: Boolean): INode[K, V] = {
     val v = /*READ*/root
     v match {
@@ -608,7 +634,8 @@ extends ConcurrentMap[K, V]
         }
     }
   }
-  
+
+  @Deprecated
   private def RDCSS_ROOT(ov: INode[K, V], expectedmain: MainNode[K, V], nv: INode[K, V]): Boolean = {
     val desc = RDCSS_Descriptor(ov, expectedmain, nv)
     if (CAS_ROOT(ov, desc)) {
@@ -664,26 +691,61 @@ extends ConcurrentMap[K, V]
   @inline final def isReadOnly = rootupdater eq null
   
   @inline final def nonReadOnly = rootupdater ne null
-  
+
+  @Deprecated
   @tailrec final def snapshot(): ConcurrentTrie[K, V] = {
     val r = RDCSS_READ_ROOT()
     val expmain = r.GCAS_READ(this)
     if (RDCSS_ROOT(r, expmain, r.copyToGen(new Gen, this))) new ConcurrentTrie(r.copyToGen(new Gen, this), rootupdater)
     else snapshot()
   }
-  
+
+  @Deprecated
   @tailrec final def readOnlySnapshot(): Map[K, V] = {
     val r = RDCSS_READ_ROOT()
     val expmain = r.GCAS_READ(this)
     if (RDCSS_ROOT(r, expmain, r.copyToGen(new Gen, this))) new ConcurrentTrie(r, null)
     else readOnlySnapshot()
   }
-  
+
+  @Deprecated
   @tailrec final override def clear() {
     val r = RDCSS_READ_ROOT()
     if (!RDCSS_ROOT(r, r.GCAS_READ(this), INode.newRootNode[K, V])) clear()
   }
-  
+
+  final def doSnapshotSync(snapshotRootUpdater: AtomicReferenceFieldUpdater[ConcurrentTrie[K, V], AnyRef]): ConcurrentTrie[K, V] = {
+    this.synchronized {
+      // Can safely use currRoot in the rest of this method body, since we locked the CTrie and no one can change the root
+      // except the current thread
+      val currRootTmp = root
+      currRootTmp match {
+        case currRoot : INode[K,V] =>
+          currRoot.synchronized {
+            val newRoot = currRoot.copyToGen(new Gen, this)
+            val snapshotRoot = currRoot.copyToGen(new Gen, this)
+            this.root = newRoot
+            return new ConcurrentTrie[K, V](snapshotRoot, snapshotRootUpdater)
+          }
+        case _ => throw new IllegalArgumentException // TODO: Make root always an indoe
+      }
+    }
+  }
+
+  final def snapshotSync(): ConcurrentTrie[K, V] = {
+    doSnapshotSync(rootupdater)
+  }
+
+  final def readOnlySnapshotSync(): Map[K, V] = {
+    doSnapshotSync(null)
+  }
+
+  final def clearSync() = {
+    this.synchronized(
+      root = INode.newRootNode[K,V]
+    )
+  }
+
   final def lookup(k: K): V = {
     val hc = computeHash(k)
     lookuphc(k, hc).asInstanceOf[V]
