@@ -12,3 +12,5 @@ target
 tmp
 tmp/
 lib_managed/
+.idea/
+**/*.iml

@@ -8,9 +8,8 @@ import scala.testing.Benchmark
 
 
 object SingleRemovingCtrie2 extends Benchmark {
-  import ctries2.ConcurrentTrie
   
-  val ct = new ConcurrentTrie[Elem, Elem]
+  val ct = new ctries2.ConcurrentTrie[Elem, Elem]
   
   override def setUp() {
     for (i <- 0 until sz) ct.put(elems(i), elems(i))
@@ -26,7 +25,7 @@ object SingleRemovingCtrie2 extends Benchmark {
 object SingleRemovingCtrie2Snapshot extends Benchmark {
   import ctries2.ConcurrentTrie
   
-  val ct = new ConcurrentTrie[Elem, Elem]
+  val ct = new ctries2.ConcurrentTrie[Elem, Elem]
   for (i <- 0 until sz) ct.put(elems(i), elems(i))
   
   def run() {
@@ -38,12 +37,11 @@ object SingleRemovingCtrie2Snapshot extends Benchmark {
 
 
 object SingleInsertionCtrie2 extends Benchmark {
-  import ctries2.ConcurrentTrie
   
-  var ct = new ConcurrentTrie[Elem, Elem]
+  var ct = new ctries2.ConcurrentTrie[Elem, Elem]
   
   override def setUp() {
-    ct = new ConcurrentTrie[Elem, Elem]
+    ct = new ctries2.ConcurrentTrie[Elem, Elem]
     for (i <- 0 until sz) ct.update(elems(i), elems(i))
   }
   
@@ -54,9 +52,8 @@ object SingleInsertionCtrie2 extends Benchmark {
 
 
 object SingleInsertionCtrie2Snapshot extends Benchmark {
-  import ctries2.ConcurrentTrie
   
-  val ct = new ConcurrentTrie[Elem, Elem]
+  val ct = new ctries2.ConcurrentTrie[Elem, Elem]
   for (i <- 0 until sz) ct.update(elems(i), elems(i))
   
   def run() {
@@ -67,9 +64,8 @@ object SingleInsertionCtrie2Snapshot extends Benchmark {
 
 
 object MultiRemovingCtrie2 extends Benchmark {
-  import ctries2.ConcurrentTrie
   
-  val ct = new ConcurrentTrie[Elem, Elem]
+  val ct = new ctries2.ConcurrentTrie[Elem, Elem]
   
   override def setUp() {
     for (i <- 0 until sz) ct.update(elems(i), elems(i))
@@ -85,7 +81,7 @@ object MultiRemovingCtrie2 extends Benchmark {
     for (i <- ins) i.join()
   }
   
-  class Remover(ct: ConcurrentTrie[Elem, Elem], n: Int, step: Int) extends Thread {
+  class Remover(ct: ctries2.ConcurrentTrie[Elem, Elem], n: Int, step: Int) extends Thread {
     override def run() {
       var i = n * step
       val until = (n + 1) * step
@@ -103,7 +99,7 @@ object MultiRemovingCtrie2 extends Benchmark {
 object MultiRemovingCtrie2Snapshot extends Benchmark {
   import ctries2.ConcurrentTrie
   
-  val ct = new ConcurrentTrie[Elem, Elem]
+  val ct = new ctries2.ConcurrentTrie[Elem, Elem]
   
   override def setUp() {
     for (i <- 0 until sz) ct.update(elems(i), elems(i))
@@ -120,7 +116,7 @@ object MultiRemovingCtrie2Snapshot extends Benchmark {
     for (i <- ins) i.join()
   }
   
-  class Remover(snap: ConcurrentTrie[Elem, Elem], n: Int, step: Int) extends Thread {
+  class Remover(snap: ctries2.ConcurrentTrie[Elem, Elem], n: Int, step: Int) extends Thread {
     override def run() {
       var i = n * step
       val until = (n + 1) * step
@@ -138,7 +134,7 @@ object MultiRemovingCtrie2Snapshot extends Benchmark {
 object MultiLookingCtrie2 extends Benchmark {
   import ctries2.ConcurrentTrie
   
-  val ct = new ConcurrentTrie[Elem, Elem]
+  val ct = new ctries2.ConcurrentTrie[Elem, Elem]
   for (i <- 0 until sz) ct.update(elems(i), elems(i))
   
   def run() {
@@ -151,7 +147,7 @@ object MultiLookingCtrie2 extends Benchmark {
     for (i <- ins) i.join()
   }
   
-  class Looker(ct: ConcurrentTrie[Elem, Elem], n: Int, step: Int) extends Thread {
+  class Looker(ct: ctries2.ConcurrentTrie[Elem, Elem], n: Int, step: Int) extends Thread {
     override def run() {
       var i = n * step
       val until = (n + 1) * step
@@ -169,7 +165,7 @@ object MultiLookingCtrie2 extends Benchmark {
 object MultiLookingCtrie2Snapshot extends Benchmark {
   import ctries2.ConcurrentTrie
   
-  val ct = new ConcurrentTrie[Elem, Elem]
+  val ct = new ctries2.ConcurrentTrie[Elem, Elem]
   for (i <- 0 until sz) ct.update(elems(i), elems(i))
   
   def run() {
@@ -183,7 +179,7 @@ object MultiLookingCtrie2Snapshot extends Benchmark {
     for (i <- ins) i.join()
   }
   
-  class Looker(snap: ConcurrentTrie[Elem, Elem], n: Int, step: Int) extends Thread {
+  class Looker(snap: ctries2.ConcurrentTrie[Elem, Elem], n: Int, step: Int) extends Thread {
     override def run() {
       var i = n * step
       val until = (n + 1) * step
