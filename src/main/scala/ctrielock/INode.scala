@@ -327,7 +327,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
                   return rec_lookup(k, hc, lev, parent, startgen, ct)
                 else
                   // Failed to update Gen, restart lookup from root
-                  return RESTART // used to be throw RestartException
+                  return INode.RESTART // used to be throw RestartException
               }
             case sn: SNode[K, V] =>
               if (sn.hc == hc && sn.k == k)
@@ -342,7 +342,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
         // Here, we might choose not to clean the parent in read-only operations - just check the contents of the TNode.
         def cleanReadOnly(tn: TNode[K, V]) = if (ct.nonReadOnly) {
           clean(parent, ct, lev - 5)
-          RESTART // used to be throw RestartException
+          INode.RESTART // used to be throw RestartException
         }
         else {
           if (tn.hc == hc && tn.k == k)
@@ -491,7 +491,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
 }
 
 object INode {
-  val RESTART: Any = new Any
+  val RESTART: AnyRef = new AnyRef
   val KEY_PRESENT = new AnyRef
   val KEY_ABSENT = new AnyRef
 

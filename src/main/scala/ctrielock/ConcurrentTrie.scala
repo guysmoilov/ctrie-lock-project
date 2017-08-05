@@ -3,8 +3,8 @@ package ctrielock
 import java.util.concurrent.atomic._
 
 import scala.annotation.tailrec
-import scala.collection.Map
-import scala.collection.mutable.ConcurrentMap
+//import scala.collection.Map
+import scala.collection.concurrent.Map
 
 
 
@@ -14,7 +14,7 @@ case class RDCSS_Descriptor[K, V](old: INode[K, V], expectedmain: MainNode[K, V]
 }
 
 class ConcurrentTrie[K, V] private (r: AnyRef, rtupd: AtomicReferenceFieldUpdater[ConcurrentTrie[K, V], AnyRef])
-extends ConcurrentMap[K, V]
+extends Map[K, V]
 {
   import ConcurrentTrie.computeHash
 

@@ -4,7 +4,7 @@ package ctries2
 
 import java.util.concurrent.atomic._
 import collection.Map
-import collection.mutable.ConcurrentMap
+import scala.collection.concurrent.Map
 import collection.immutable.ListMap
 import annotation.tailrec
 import annotation.switch
@@ -563,7 +563,7 @@ case class RDCSS_Descriptor[K, V](old: INode[K, V], expectedmain: MainNode[K, V]
 
 
 class ConcurrentTrie[K, V] private (r: AnyRef, rtupd: AtomicReferenceFieldUpdater[ConcurrentTrie[K, V], AnyRef])
-extends ConcurrentMap[K, V]
+extends scala.collection.concurrent.Map[K, V]
 {
   import ConcurrentTrie.computeHash
   
@@ -674,7 +674,7 @@ extends ConcurrentMap[K, V]
     else snapshot()
   }
   
-  @tailrec final def readOnlySnapshot(): Map[K, V] = {
+  @tailrec final def readOnlySnapshot(): scala.collection.concurrent.Map[K, V] = {
     val r = RDCSS_READ_ROOT()
     val expmain = r.GCAS_READ(this)
     if (RDCSS_ROOT(r, expmain, r.copyToGen(new Gen, this))) new ConcurrentTrie(r, null)
