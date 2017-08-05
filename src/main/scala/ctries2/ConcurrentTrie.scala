@@ -872,10 +872,6 @@ class CtrieIterator[K, V](ct: ConcurrentTrie[K, V], mustInit: Boolean = true) ex
 
 object RestartException extends util.control.ControlThrowable
 
-
-final class Gen
-
-
 private[ctries2] object Debug {
   import collection._
   

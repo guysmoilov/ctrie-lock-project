@@ -6,7 +6,7 @@ import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
  * The only point of this class is dealing with the {@link #prev} field - which we won't need any more after switching
  * to locks.
  * After removing the prev, the point of this class will be to differentiate between {@link INode} and all other nodes,
- * which can be contained in {@link INodeBase#mainnode}
+ * which can be contained in {@link INode#mainnode}
  */
 public abstract class MainNode<K, V> extends BasicNode {
 

@@ -257,11 +257,12 @@ final class INode[K, V](private val updater: AtomicReferenceFieldUpdater[INodeBa
 }
 
 
-final class CNode[K, V](bmp: Int, a: Array[INode[K, V]]) extends CNodeBase[K, V] {
+final class CNode[K, V](bmp: Int, a: Array[INode[K, V]]) {
+
   assert(Integer.bitCount(bmp) == a.length) // TODO comment this line
-  bitmap = bmp
-  array = a
-  
+  var bitmap : Int = bmp
+  var array : Array[INode[K, V]] = a
+
   private[ctries] def string(lev: Int): String = "CNode %x\n%s".format(bitmap, array.map(_.string(lev + 1)).mkString("\n"))
   
   private def resurrect(inode: INode[K, V], inodemain: AnyRef) = inodemain match {
@@ -388,9 +389,9 @@ final class SNode[K, V](final val k: K, final val v: V, final val hc: Int, final
 // TODO final class LNode
 
 
-class ConcurrentTrie[K, V] extends ConcurrentTrieBase[K, V] {
-  root = new INode[K, V](ConcurrentTrie.inodeupdater)
-  private val rootupdater = AtomicReferenceFieldUpdater.newUpdater(classOf[ConcurrentTrieBase[_, _]], classOf[INode[_, _]], "root")
+class ConcurrentTrie[K, V] {
+  @volatile var root = new INode[K, V](ConcurrentTrie.inodeupdater)
+  private val rootupdater = AtomicReferenceFieldUpdater.newUpdater(classOf[ConcurrentTrie[_, _]], classOf[INode[_, _]], "root")
   
   @inline private def computeHash(k: K): Int = {
     k.hashCode

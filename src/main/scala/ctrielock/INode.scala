@@ -1,5 +1,7 @@
 package ctrielock
 
+import java.util.concurrent.atomic.AtomicReferenceFieldUpdater
+
 import scala.annotation.tailrec
 
 /**
@@ -7,18 +9,24 @@ import scala.annotation.tailrec
   * Created by Tolstoyevsky on 05/08/2017.
   * </p>
   */
-final class INode[K, V](bn: MainNode[K, V], g: Gen) extends INodeBase[K, V](g) {
-  import INodeBase._
+final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
 
-  WRITE(bn)
+  // Copied from INodeBase
+  @deprecated val updater: AtomicReferenceFieldUpdater[INode[_, _], MainNode[_, _]] =
+  AtomicReferenceFieldUpdater.newUpdater(classOf[INode[_, _]], classOf[MainNode[_, _]], "mainnode")
+
+  var mainnode: MainNode[K, V] = bn
+
+  val gen: Gen = null
+  // End
 
   def this(g: Gen) = this(null, g)
 
   @Deprecated
-  @inline final def WRITE(nval: MainNode[K, V]) = INodeBase.updater.set(this, nval)
+  @inline final def WRITE(nval: MainNode[K, V]) = updater.set(this, nval)
 
   @Deprecated
-  @inline final def CAS(old: MainNode[K, V], n: MainNode[K, V]) = INodeBase.updater.compareAndSet(this, old, n)
+  @inline final def CAS(old: MainNode[K, V], n: MainNode[K, V]) = updater.compareAndSet(this, old, n)
 
   @Deprecated
   @inline final def GCAS_READ(ct: ConcurrentTrie[K, V]): MainNode[K, V] = {
@@ -483,6 +491,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends INodeBase[K, V](g) {
 }
 
 object INode {
+  val RESTART: Any = new Any
   val KEY_PRESENT = new AnyRef
   val KEY_ABSENT = new AnyRef
 

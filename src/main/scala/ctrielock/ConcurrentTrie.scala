@@ -91,7 +91,7 @@ extends ConcurrentMap[K, V]
   @tailrec private def lookuphc(k: K, hc: Int): AnyRef = {
     val r = RDCSS_READ_ROOT()
     val res = r.rec_lookup(k, hc, 0, null, r.gen, this)
-    if (res eq INodeBase.RESTART) lookuphc(k, hc)
+    if (res eq INode.RESTART) lookuphc(k, hc)
     else res
   }
   
@@ -233,8 +233,6 @@ extends ConcurrentMap[K, V]
 }
 
 object ConcurrentTrie {
-  val inodeupdater = AtomicReferenceFieldUpdater.newUpdater(classOf[INodeBase[_, _]], classOf[MainNode[_, _]], "mainnode")
-  
   @inline final def computeHash[K](k: K): Int = {
     k.hashCode
   }
