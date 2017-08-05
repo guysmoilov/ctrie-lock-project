@@ -2,7 +2,8 @@
 project/boot
 
 # target dir contents
-target
+target/
+out/
 
 # garbage
 *~
