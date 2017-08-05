@@ -531,7 +531,7 @@ extends MainNode[K, V] {
     new CNode[K, V](bmp, tmparray, gen).toContracted(lev)
   }
   
-  private[ctries2] def string(lev: Int): String = "CNode %x\n%s".format(bitmap, array.map(_.string(lev + 1)).mkString("\n"))
+  private[ctrielock] def string(lev: Int): String = "CNode %x\n%s".format(bitmap, array.map(_.string(lev + 1)).mkString("\n"))
   
   /* quiescently consistent - don't call concurrently to anything involving a GCAS!! */
   protected def collectElems: Seq[(K, V)] = array flatMap {
@@ -936,7 +936,7 @@ object RestartException extends util.control.ControlThrowable
 final class Gen
 
 
-private[ctries2] object Debug {
+private[ctrielock] object Debug {
   import collection._
   
   lazy val logbuffer = new java.util.concurrent.ConcurrentLinkedQueue[AnyRef]
