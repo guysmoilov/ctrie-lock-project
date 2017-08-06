@@ -1,11 +1,14 @@
 package ctrielock
 
+import scala.collection.immutable
+
 /**
   * <p>
   * Created by Tolstoyevsky on 05/08/2017.
   * </p>
   */
-class CtrieIterator[K, V](ct: ConcurrentTrie[K, V], mustInit: Boolean = true) extends Iterator[(K, V)] {
+class CtrieIterator[K, V](ct: ConcurrentTrie[K, V], mustInit: Boolean = true)
+  extends scala.collection.Iterator[(K, V)] {
   var stack = new Array[Array[BasicNode]](7)
   var stackpos = new Array[Int](7)
   var depth = -1
@@ -28,7 +31,7 @@ class CtrieIterator[K, V](ct: ConcurrentTrie[K, V], mustInit: Boolean = true) ex
     r
   } else Iterator.empty.next()
 
-  private def readin(in: INode[K, V]) = in.GCAS_READ(ct) match {
+  private def readin(in: INode[K, V]) = in.READ_MAIN() match {
     case cn: CNode[K, V] =>
       depth += 1
       stack(depth) = cn.array
@@ -51,7 +54,7 @@ class CtrieIterator[K, V](ct: ConcurrentTrie[K, V], mustInit: Boolean = true) ex
   @inline private def initialize() {
     assert(ct.isReadOnly)
 
-    val r = ct.RDCSS_READ_ROOT()
+    val r = ct.READ_ROOT()
     readin(r)
   }
 
@@ -107,4 +110,8 @@ class CtrieIterator[K, V](ct: ConcurrentTrie[K, V], mustInit: Boolean = true) ex
     println("curr.: " + current)
     println(stack.mkString("\n"))
   }
+
+  // Forced to add these by the compiler, probably added in a newer version of scala
+  override def toArray[A1 >: (K, V)](implicit evidence$1: ClassManifest[A1]): Array[A1] = toArray
+  override def toIndexedSeq[A1 >: (K, V)]: immutable.IndexedSeq[A1] = null
 }

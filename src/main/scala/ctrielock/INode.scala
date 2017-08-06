@@ -1,7 +1,5 @@
 package ctrielock
 
-import java.util.concurrent.atomic.AtomicReferenceFieldUpdater
-
 import scala.annotation.tailrec
 
 /**
@@ -12,85 +10,66 @@ import scala.annotation.tailrec
 final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
 
   // Copied from INodeBase
-  @deprecated val updater: AtomicReferenceFieldUpdater[INode[_, _], MainNode[_, _]] =
-  AtomicReferenceFieldUpdater.newUpdater(classOf[INode[_, _]], classOf[MainNode[_, _]], "mainnode")
-
-  var mainnode: MainNode[K, V] = bn
-
+  @volatile var mainnode: MainNode[K, V] = bn
   val gen: Gen = null
   // End
 
   def this(g: Gen) = this(null, g)
 
-  @Deprecated
-  @inline final def WRITE(nval: MainNode[K, V]) = updater.set(this, nval)
+  /**
+    * The usage of this field should be something like this:
+    * <pre>
+    * def someAtomicWriteOperation(ct: CTrie) {
+    *   this.synchronized {
+    *     val whatToWrite = (something based on the existing mainnode and the specific type of write operation)
+    *     <b>aboutToWrite = true</b>
+    *     if (ct.READ_ROOT().gen == expectedGen) {
+    *
+    *       // Context switch could potentially happen here.
+    *       // Say a context switch happens here, then a readonly snapshot is taken.
+    *       // Readers could then read this.mainnode.
+    *       // Next, this thread regains control, and overwrites this.mainnode, since it already compared generations.
+    *       // This violates linearizability for the readers.
+    *       // The code in READ_MAIN should prevent readers from seeing a value that is about to be
+    *       // overwritten in the next line.
+    *
+    *       WRITE_MAIN(whatToWrite)
+    *     }
+    *     <b>aboutToWrite = false</b>
+    *   }
+    * }
+    * </pre>
+    */
+  @volatile private var aboutToWrite = false
 
-  @Deprecated
-  @inline final def CAS(old: MainNode[K, V], n: MainNode[K, V]) = updater.compareAndSet(this, old, n)
-
-  @Deprecated
-  @inline final def GCAS_READ(ct: ConcurrentTrie[K, V]): MainNode[K, V] = {
-    val m = /*READ*/mainnode
-    val prevval = /*READ*/m.prev
-    if (prevval eq null) m
-    else GCAS_Complete(m, ct)
+  @inline private final def WRITE_MAIN(nval: MainNode[K, V]) = {
+    // Important to compile without assertions for benchmarks!
+    // Using scalac -Xelide-below MAXIMUM
+    assert(aboutToWrite)
+    mainnode = nval
   }
 
-  @Deprecated
-  @tailrec private def GCAS_Complete(m: MainNode[K, V], ct: ConcurrentTrie[K, V]): MainNode[K, V] =
-    if (m eq null) null
-    else {
-      // complete the GCAS
-      val prev = /*READ*/ m.prev
-      val ctr = ct.RDCSS_READ_ROOT(true)
-
-      prev match {
-        case null =>
-          m
-        case fn: FailedNode[_, _] => // try to commit to previous value
-          if (CAS(m, fn.prev)) fn.prev
-          else GCAS_Complete(/*READ*/ mainnode, ct)
-        case vn: MainNode[_, _] =>
-          // Assume that you've read the root from the generation G.
-          // Assume that the snapshot algorithm is correct.
-          // ==> you can only reach nodes in generations <= G.
-          // ==> `gen` is <= G.
-          // We know that `ctr.gen` is >= G.
-          // ==> if `ctr.gen` = `gen` then they are both equal to G.
-          // ==> otherwise, we know that either `ctr.gen` > G, `gen` < G,
-          //     or both
-          if ((ctr.gen eq gen) && ct.nonReadOnly) {
-            // try to commit
-            if (m.CAS_PREV(prev, null)) m
-            else GCAS_Complete(m, ct)
-          } else {
-            // try to abort
-            m.CAS_PREV(prev, new FailedNode(prev))
-            GCAS_Complete(/*READ*/ mainnode, ct)
-          }
-      }
+  /**
+    * The point here is to only return the mainnode from a quiescent point in time - otherwise, a readonly snapshot iterator
+    * could interleave with an inserting thread that already decided to overwrite the main node. <br/>
+    * (see [[ctrielock.INode#aboutToWrite]] )
+    */
+  @inline private[ctrielock] final def READ_MAIN(): MainNode[K, V] = {
+    while(true) {
+      val tmp = mainnode
+      if (!aboutToWrite && mainnode == tmp)
+        return tmp
     }
-
-  @Deprecated
-  @inline final def GCAS(old: MainNode[K, V], n: MainNode[K, V], ct: ConcurrentTrie[K, V]): Boolean = {
-    n.WRITE_PREV(old)
-    if (CAS(old, n)) {
-      GCAS_Complete(n, ct)
-      /*READ*/n.prev eq null
-    } else false
+    throw new RuntimeException("Impossibru!")
   }
 
-  @inline private def inode(cn: MainNode[K, V]) = {
-    val nin = new INode[K, V](gen)
-    nin.WRITE(cn)
-    nin
+  @inline def inode(cn: MainNode[K, V]): INode[K, V] = {
+     return new INode[K, V](cn, gen)
   }
 
-  @inline final def copyToGen(ngen: Gen, ct: ConcurrentTrie[K, V]) = {
-    val nin = new INode[K, V](ngen)
-    val main = GCAS_READ(ct)
-    nin.WRITE(main)
-    nin
+  @inline def copyToGen(ngen: Gen): INode[K, V] = {
+    val main = READ_MAIN()
+    return new INode[K, V](main, ngen)
   }
 
   /** Inserts a key value pair, overwriting the old pair if the keys match.
@@ -98,7 +77,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
    *  @return        true if successful, false otherwise
    */
   @tailrec final def rec_insert(k: K, v: V, hc: Int, lev: Int, parent: INode[K, V], startgen: Gen, ct: ConcurrentTrie[K, V]): Boolean = {
-    val m = GCAS_READ(ct) // use -Yinline!
+    val m = READ_MAIN() // use -Yinline!
 
     m match {
       case cn: CNode[K, V] => // 1) a multiway node
@@ -146,6 +125,9 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
         val nn = ln.inserted(k, v)
         return GCAS(ln, nn, ct)
     }
+
+    // If we locked, detected that we need to abort the lock and repeat, then we'll come here and retry reading the current node.
+    return rec_insert(k, v, hc, lev, parent, startgen, ct)
   }
 
   /** Inserts a new key value pair, given that a specific condition is met.
@@ -154,7 +136,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
    *  @return            null if unsuccessful, Option[V] otherwise (indicating previous value bound to the key)
    */
   @tailrec final def rec_insertif(k: K, v: V, hc: Int, cond: AnyRef, lev: Int, parent: INode[K, V], startgen: Gen, ct: ConcurrentTrie[K, V]): Option[V] = {
-    val m = GCAS_READ(ct)  // use -Yinline!
+    val m = READ_MAIN()  // use -Yinline!
 
     m match {
       case cn: CNode[K, V] => // 1) a multiway node
@@ -304,7 +286,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
    *  @return          null if no value has been found, RESTART if the operation wasn't successful, or any other value otherwise
    */
   @tailrec final def rec_lookup(k: K, hc: Int, lev: Int, parent: INode[K, V], startgen: Gen, ct: ConcurrentTrie[K, V]): AnyRef = {
-    val m = GCAS_READ(ct) // use -Yinline!
+    val m = READ_MAIN() // use -Yinline!
 
     m match {
       case cn: CNode[K, V] => // 1) a multinode
@@ -342,7 +324,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
         // Here, we might choose not to clean the parent in read-only operations - just check the contents of the TNode.
         def cleanReadOnly(tn: TNode[K, V]) = if (ct.nonReadOnly) {
           clean(parent, ct, lev - 5)
-          RESTART // used to be throw RestartException
+          INode.RESTART // used to be throw RestartException
         }
         else {
           if (tn.hc == hc && tn.k == k)
@@ -361,7 +343,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
    *  @return          null if not successful, an Option[V] indicating the previous value otherwise
    */
   final def rec_remove(k: K, v: V, hc: Int, lev: Int, parent: INode[K, V], startgen: Gen, ct: ConcurrentTrie[K, V]): Option[V] = {
-    val m = GCAS_READ(ct) // use -Yinline!
+    val m = READ_MAIN() // use -Yinline!
 
     m match {
       case cn: CNode[K, V] =>
@@ -408,7 +390,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
           else {
             // The remove operation succeeded, we may need to clean (shrink) the subtree into the parent's CNode
             @tailrec def cleanParent(nonlive: AnyRef) {
-              val pm = parent.GCAS_READ(ct)
+              val pm = parent.READ_MAIN()
               pm match {
                 case cn: CNode[K, V] =>
                   val idx = (hc >>> (lev - 5)) & 0x1f
@@ -425,7 +407,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
                         val ncn = cn.updatedAt(pos, tn.copyUntombed, gen).toContracted(lev - 5)
                         if (!parent.GCAS(cn, ncn, ct))
                           // Retry cleanup, maybe the Gen changed or there was a concurrent modification
-                          if (ct.RDCSS_READ_ROOT().gen == startgen) return cleanParent(nonlive)
+                          if (ct.READ_ROOT().gen == startgen) return cleanParent(nonlive)
                     }
                   }
                 case _ => return // parent is no longer a cnode, we're done (some other thread already cleaned up)
@@ -433,7 +415,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
             }
 
             if (parent ne null) { // never tomb at root
-              val n = GCAS_READ(ct)
+              val n = READ_MAIN()
               if (n.isInstanceOf[TNode[_, _]])
                 cleanParent(n)
             }
@@ -473,7 +455,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
 
   private def clean(nd: INode[K, V], ct: ConcurrentTrie[K, V], lev: Int) {
     // TODO: Lock nd, then do this
-    val m = nd.GCAS_READ(ct)
+    val m = nd.READ_MAIN()
     m match {
       case cn: CNode[K, V] => nd.GCAS(cn, cn.toCompressed(ct, lev, gen), ct)
       case _ =>
@@ -491,7 +473,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
 }
 
 object INode {
-  val RESTART: Any = new Any
+  val RESTART: AnyRef = new AnyRef
   val KEY_PRESENT = new AnyRef
   val KEY_ABSENT = new AnyRef
 

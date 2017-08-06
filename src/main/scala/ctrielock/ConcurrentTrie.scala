@@ -3,7 +3,7 @@ package ctrielock
 import scala.annotation.tailrec
 import scala.collection.{Map, mutable, immutable}
 
-class ConcurrentTrie[K, V] private (rt: INode[K,V], isReadOnly : Boolean)
+class ConcurrentTrie[K, V] private (rt: INode[K,V], readonly : Boolean)
 extends mutable.ConcurrentMap[K, V] {
 
   private val rootLock = new Object
@@ -12,48 +12,49 @@ extends mutable.ConcurrentMap[K, V] {
   def this(r: INode[K,V]) = this(r, false)
 
   def this() = this(INode.newRootNode : INode[K,V])
-  
+
   /* internal methods */
 
-  @inline private def READ_ROOT() = {
+  @inline private[ctrielock] def READ_ROOT() = {
     root
   }
 
   @inline private def WRITE_ROOT(newR : INode[K,V]) = {
     root = newR
   }
-  
+
   @tailrec private def inserthc(k: K, hc: Int, v: V) {
     val r = READ_ROOT()
     if (!r.rec_insert(k, v, hc, 0, null, r.gen, this)) inserthc(k, hc, v)
   }
-  
+
   @tailrec private def insertifhc(k: K, hc: Int, v: V, cond: AnyRef): Option[V] = {
     val r = READ_ROOT()
     val ret = r.rec_insertif(k, v, hc, cond, 0, null, r.gen, this)
     if (ret eq null) insertifhc(k, hc, v, cond)
     else ret
   }
-  
+
   @tailrec private def lookuphc(k: K, hc: Int): AnyRef = {
     val r = READ_ROOT()
     val res = r.rec_lookup(k, hc, 0, null, r.gen, this)
     if (res eq INode.RESTART) lookuphc(k, hc)
     else res
   }
-  
+
   @tailrec private def removehc(k: K, v: V, hc: Int): Option[V] = {
     val r = READ_ROOT()
     val res = r.rec_remove(k, v, hc, 0, null, r.gen, this)
     if (res ne null) res
     else removehc(k, v, hc)
   }
-  
+
   def string = READ_ROOT().string(0)
-  
+
   /* public methods */
-  
-  @inline final def nonReadOnly = !isReadOnly
+
+  @inline final def isReadOnly = readonly
+  @inline final def nonReadOnly = !readonly
 
   final def snapshot(): ConcurrentTrie[K, V] = {
     doSnapshotSync(false)
@@ -77,10 +78,10 @@ extends mutable.ConcurrentMap[K, V] {
       val currRoot = READ_ROOT()
       // Also lock on the root itself to prevent a thread modifying its main node while we're copying it.
       currRoot.synchronized {
-        val newRoot = currRoot.copyToGen(new Gen, this)
+        val newRoot = currRoot.copyToGen(new Gen)
         // If the snapshot we return is destined to be readOnly, we can reuse the current root, since we know the snapshot
         // won't be mutating it, and mutations on "this" will occur on the new generation root
-        val snapshotRoot = if (readonlySnapshot) currRoot else currRoot.copyToGen(new Gen, this)
+        val snapshotRoot = if (readonlySnapshot) currRoot else currRoot.copyToGen(new Gen)
         WRITE_ROOT(newRoot) // Linearization point
         return new ConcurrentTrie[K, V](snapshotRoot, readonlySnapshot)
       }
@@ -153,8 +154,8 @@ extends mutable.ConcurrentMap[K, V] {
     if (nonReadOnly) readOnlySnapshot().iterator
     else new CtrieIterator(this)
 
+  // Forced to add these by the compiler, probably added in a newer version of scala
   override def toArray[A1 >: (K, V)](implicit evidence$1: ClassManifest[A1]): Array[A1] = toArray
-
   override def toIndexedSeq[A1 >: (K, V)]: immutable.IndexedSeq[A1] = null
 }
 

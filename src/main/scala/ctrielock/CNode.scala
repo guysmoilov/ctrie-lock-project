@@ -45,7 +45,7 @@ extends MainNode[K, V] {
     val narr = new Array[BasicNode](len)
     while (i < len) {
       arr(i) match {
-        case in: INode[K, V] => narr(i) = in.copyToGen(ngen, ct)
+        case in: INode[K, V] => narr(i) = in.copyToGen(ngen)
         case bn: BasicNode => narr(i) = bn
       }
       i += 1
@@ -78,7 +78,7 @@ extends MainNode[K, V] {
       val sub = arr(i)
       sub match {
         case in: INode[K, V] =>
-          val inodemain = in.GCAS_READ(ct)
+          val inodemain = in.READ_MAIN()
           assert(inodemain ne null)
           tmparray(i) = resurrect(in, inodemain)
         case sn: SNode[K, V] =>
