@@ -3,11 +3,11 @@ package ctries2
 
 
 import java.util.concurrent.atomic._
-import collection.Map
-import collection.mutable.ConcurrentMap
-import collection.immutable.ListMap
-import annotation.tailrec
-import annotation.switch
+
+import scala.annotation.tailrec
+import scala.collection.GenMap
+import scala.collection.concurrent.Map
+import scala.collection.immutable.ListMap
 
 
 
@@ -563,7 +563,7 @@ case class RDCSS_Descriptor[K, V](old: INode[K, V], expectedmain: MainNode[K, V]
 
 
 class ConcurrentTrie[K, V] private (r: AnyRef, rtupd: AtomicReferenceFieldUpdater[ConcurrentTrie[K, V], AnyRef])
-extends ConcurrentMap[K, V]
+extends Map[K, V]
 {
   import ConcurrentTrie.computeHash
   
@@ -751,7 +751,8 @@ extends ConcurrentMap[K, V]
   def iterator: Iterator[(K, V)] =
     if (nonReadOnly) readOnlySnapshot().iterator
     else new CtrieIterator(this)
-  
+
+  override def toMap[K, V](implicit ev: <:<[(K, V), (K, V)]): GenMap[K, V] = ??? // TODO: implement
 }
 
 
@@ -866,7 +867,8 @@ class CtrieIterator[K, V](ct: ConcurrentTrie[K, V], mustInit: Boolean = true) ex
     println("curr.: " + current)
     println(stack.mkString("\n"))
   }
-  
+
+  override def toMap[K, V](implicit ev: <:<[(K, V), (K, V)]): GenMap[K, V] = ??? // TODO: implement
 }
 
 
