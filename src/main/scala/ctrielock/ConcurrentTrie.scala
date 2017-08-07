@@ -35,11 +35,9 @@ extends mutable.ConcurrentMap[K, V] {
     else ret
   }
 
-  @tailrec private def lookuphc(k: K, hc: Int): AnyRef = {
+  private def lookuphc(k: K, hc: Int): AnyRef = {
     val r = READ_ROOT()
-    val res = r.rec_lookup(k, hc, 0, null, r.gen, this)
-    if (res eq INode.RESTART) lookuphc(k, hc)
-    else res
+    return r.rec_lookup(k, hc, 0, null)
   }
 
   @tailrec private def removehc(k: K, v: V, hc: Int): Option[V] = {

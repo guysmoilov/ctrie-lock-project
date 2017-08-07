@@ -281,11 +281,10 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
     }
   }
 
-  /** Looks up the value associated with the key.
-   *
-   *  @return          null if no value has been found, RESTART if the operation wasn't successful, or any other value otherwise
+  /**
+    * @return The value matching k, or null if k is not in the map. Our implementation will never restart.
    */
-  @tailrec final def rec_lookup(k: K, hc: Int, lev: Int, parent: INode[K, V], startgen: Gen, ct: ConcurrentTrie[K, V]): AnyRef = {
+  @tailrec final def rec_lookup(k: K, hc: Int, lev: Int, parent: INode[K, V]): AnyRef = {
     val m = READ_MAIN() // use -Yinline!
 
     m match {
@@ -293,24 +292,26 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
         val idx = (hc >>> lev) & 0x1f
         val flag = 1 << idx
         val bmp = cn.bitmap
-        if ((bmp & flag) == 0) null // 1a) bitmap shows no binding
+        if ((bmp & flag) == 0) return null // 1a) bitmap shows no binding
         else { // 1b) bitmap contains a value - descend
           val pos = if (bmp == 0xffffffff) idx else Integer.bitCount(bmp & (flag - 1))
           val sub = cn.array(pos)
           sub match {
             case in: INode[K, V] =>
-              if (ct.isReadOnly || (startgen eq in.gen))
-                // Go down one level in recursion
-                return in.rec_lookup(k, hc, lev + 5, this, startgen, ct)
-              else {
-                // Generation mismatch - we'll probably ignore this in read-only-operations
-                if (GCAS(cn, cn.renewed(startgen, ct), ct))
-                  // Retry current invocation
-                  return rec_lookup(k, hc, lev, parent, startgen, ct)
-                else
-                  // Failed to update Gen, restart lookup from root
-                  return RESTART // used to be throw RestartException
-              }
+              // WARNING: There used to be a generation check here, and even a generation update if it failed.
+              // I don't think readers actually have to do this, but maybe I missed something.
+              // Removing this generation check can cause a reader to return a value that was already removed from the
+              // CTrie, if a snapshot happens while the reader is traversing and then the CTrie gets mutated on a new Gen.
+              // However, I still think this counts as linearizable - the reader will return a value that really was
+              // valid at some point in its runtime.
+
+              // We can always add something like this here to do the generation check:
+              // if (!ct.isReadOnly && in.Gen != startgen)
+              //    this.synchronized { renewGen(); }
+              // retry current invocation
+
+              // Go down one level in recursion
+              return in.rec_lookup(k, hc, lev + 5, this)
             case sn: SNode[K, V] =>
               if (sn.hc == hc && sn.k == k)
                 // Found
@@ -321,17 +322,12 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
           }
         }
       case tn: TNode[K, V] =>
-        // Here, we might choose not to clean the parent in read-only operations - just check the contents of the TNode.
-        def cleanReadOnly(tn: TNode[K, V]) = if (ct.nonReadOnly) {
-          clean(parent, ct, lev - 5)
-          INode.RESTART // used to be throw RestartException
-        }
-        else {
-          if (tn.hc == hc && tn.k == k)
-            tn.v.asInstanceOf[AnyRef]
-          else null
-        }
-        return cleanReadOnly(tn)
+        // WARNING: The readers used to clean the TNode's parent here, but I removed it. I think it puts unnecessary
+        // load on the readers, since the rec_remove method tries to recursively clean up the tree after creating a
+        // TNode anyway. I don't think this causes a linearizability problem.
+        if (tn.hc == hc && tn.k == k)
+          return tn.v.asInstanceOf[AnyRef]
+        else return null
       case ln: LNode[K, V] =>
         return ln.get(k).asInstanceOf[Option[AnyRef]].orNull
     }
