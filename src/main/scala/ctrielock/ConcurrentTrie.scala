@@ -1,10 +1,10 @@
 package ctrielock
 
 import scala.annotation.tailrec
-import scala.collection.{Map, mutable, immutable}
+import scala.collection.{GenMap, Map}
 
 class ConcurrentTrie[K, V] private (rt: INode[K,V], readonly : Boolean)
-extends mutable.ConcurrentMap[K, V] {
+extends scala.collection.concurrent.Map[K, V] {
 
   private val rootLock = new Object
   @volatile private var root = rt
@@ -156,7 +156,8 @@ extends mutable.ConcurrentMap[K, V] {
 
   // Forced to add these by the compiler, probably added in a newer version of scala
   override def toArray[A1 >: (K, V)](implicit evidence$1: ClassManifest[A1]): Array[A1] = toArray
-  override def toIndexedSeq[A1 >: (K, V)]: immutable.IndexedSeq[A1] = null
+
+  override def toMap[K, V](implicit ev: <:<[(K, V), (K, V)]): GenMap[K, V] = ??? // TODO: implement
 }
 
 object ConcurrentTrie {
