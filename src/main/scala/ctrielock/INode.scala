@@ -7,11 +7,10 @@ import scala.annotation.tailrec
   * Created by Tolstoyevsky on 05/08/2017.
   * </p>
   */
-final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
+final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
 
   // Copied from INodeBase
   @volatile var mainnode: MainNode[K, V] = bn
-  val gen: Gen = null
   // End
 
   def this(g: Gen) = this(null, g)
@@ -63,6 +62,34 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
     throw new RuntimeException("Impossibru!")
   }
 
+  /**
+    * TODO : Return one of three values here :
+    * <ul>
+    *   <li>success</li>
+    *   <li>failure due to mainnode mismatch (which is recoverable)</li>
+    *   <li>failure due to generation mismatch (which is NOT recoverable)</li>
+    * </ul>
+    */
+  @inline private final def GCAS_SYNC(expected: MainNode[K,V], newMain: MainNode[K,V], ct: ConcurrentTrie[K,V]) : Boolean = {
+    // We can consider failing fast here -
+    // read mainnode and compare it to expected before locking, then again after locking.
+    // Benchmarks should tell us which method is faster.
+    this.synchronized {
+      // No need to use READ_MAIN(), since we hold the lock
+      val currMain = mainnode
+      aboutToWrite = true
+      if (currMain == expected && this.gen == ct.READ_ROOT().gen) {
+        WRITE_MAIN(newMain)
+        aboutToWrite = false
+        return true
+      }
+      else {
+        aboutToWrite = false
+        return false
+      }
+    }
+  }
+
   @inline def inode(cn: MainNode[K, V]): INode[K, V] = {
      return new INode[K, V](cn, gen)
   }
@@ -94,7 +121,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
                 // Go down a level in the recursion
                 return in.rec_insert(k, v, hc, lev + 5, this, startgen, ct)
               else {
-                if (GCAS(cn, cn.renewed(startgen, ct), ct))
+                if (GCAS_SYNC(cn, cn.renewed(startgen, ct), ct))
                   // Retry current invocation
                   return rec_insert(k, v, hc, lev, parent, startgen, ct)
                 else
@@ -104,26 +131,26 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
             case sn: SNode[K, V] =>
               if (sn.hc == hc && sn.k == k)
                 // Replace the value of the existing SNode
-                return GCAS(cn, cn.updatedAt(pos, new SNode(k, v, hc), gen), ct)
+                return GCAS_SYNC(cn, cn.updatedAt(pos, new SNode(k, v, hc), gen), ct)
               else {
                 // Hash collision, either create a new subtree or put the two values into an LNode.
                 val rn = if (cn.gen eq gen) cn else cn.renewed(gen, ct)
                 val nn = rn.updatedAt(pos, inode(CNode.dual(sn, sn.hc, new SNode(k, v, hc), hc, lev + 5, gen)), gen)
-                return GCAS(cn, nn, ct)
+                return GCAS_SYNC(cn, nn, ct)
               }
           }
         } else {
           // Current CNode doesn't contain the new key k, so just insert it.
           val rn = if (cn.gen eq gen) cn else cn.renewed(gen, ct)
           val ncnode = rn.insertedAt(pos, flag, new SNode(k, v, hc), gen)
-          return GCAS(cn, ncnode, ct)
+          return GCAS_SYNC(cn, ncnode, ct)
         }
       case tn: TNode[K, V] =>
         clean(parent, ct, lev - 5)
         return false
       case ln: LNode[K, V] =>
         val nn = ln.inserted(k, v)
-        return GCAS(ln, nn, ct)
+        return GCAS_SYNC(ln, nn, ct)
     }
 
     // If we locked, detected that we need to abort the lock and repeat, then we'll come here and retry reading the current node.
@@ -153,7 +180,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
                 // Go down one level in the recursion
                 return in.rec_insertif(k, v, hc, cond, lev + 5, this, startgen, ct)
               else {
-                if (GCAS(cn, cn.renewed(startgen, ct), ct))
+                if (GCAS_SYNC(cn, cn.renewed(startgen, ct), ct))
                   // Retry current invocation with new Gen
                   return rec_insertif(k, v, hc, cond, lev, parent, startgen, ct)
                 else
@@ -163,7 +190,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
             case sn: SNode[K, V] => cond match {
               case null =>
                 if (sn.hc == hc && sn.k == k) {
-                  if (GCAS(cn, cn.updatedAt(pos, new SNode(k, v, hc), gen), ct))
+                  if (GCAS_SYNC(cn, cn.updatedAt(pos, new SNode(k, v, hc), gen), ct))
                     // Replaced existing value, return the previous value
                     return Some(sn.v)
                   else
@@ -174,7 +201,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
                   // Hashcode collision
                   val rn = if (cn.gen eq gen) cn else cn.renewed(gen, ct)
                   val nn = rn.updatedAt(pos, inode(CNode.dual(sn, sn.hc, new SNode(k, v, hc), hc, lev + 5, gen)), gen)
-                  if (GCAS(cn, nn, ct))
+                  if (GCAS_SYNC(cn, nn, ct))
                     // Succesfully inserted, but key did not exist, so no previous value
                     return None
                   else
@@ -189,7 +216,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
                   // Hashcode collision
                   val rn = if (cn.gen eq gen) cn else cn.renewed(gen, ct)
                   val nn = rn.updatedAt(pos, inode(CNode.dual(sn, sn.hc, new SNode(k, v, hc), hc, lev + 5, gen)), gen)
-                  if (GCAS(cn, nn, ct))
+                  if (GCAS_SYNC(cn, nn, ct))
                     // Successfully insert new value, no existing value was replaced
                     return None
                   else
@@ -198,7 +225,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
                 }
               case INode.KEY_PRESENT =>
                 if (sn.hc == hc && sn.k == k) {
-                  if (GCAS(cn, cn.updatedAt(pos, new SNode(k, v, hc), gen), ct))
+                  if (GCAS_SYNC(cn, cn.updatedAt(pos, new SNode(k, v, hc), gen), ct))
                     // Successfully replaced previous value
                     return Some(sn.v)
                   else
@@ -210,7 +237,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
                   return None
               case otherv: V =>
                 if (sn.hc == hc && sn.k == k && sn.v == otherv) {
-                  if (GCAS(cn, cn.updatedAt(pos, new SNode(k, v, hc), gen), ct))
+                  if (GCAS_SYNC(cn, cn.updatedAt(pos, new SNode(k, v, hc), gen), ct))
                     // Successfully replaced existing value, return old value
                     return Some(sn.v)
                   else
@@ -228,7 +255,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
           case null | INode.KEY_ABSENT =>
             val rn = if (cn.gen eq gen) cn else cn.renewed(gen, ct)
             val ncnode = rn.insertedAt(pos, flag, new SNode(k, v, hc), gen)
-            if (GCAS(cn, ncnode, ct))
+            if (GCAS_SYNC(cn, ncnode, ct))
               // Successfully inserted, no previous value
               return None
             else
@@ -243,7 +270,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
       case ln: LNode[K, V] => // 3) an l-node
         @inline def insertln() = {
           val nn = ln.inserted(k, v)
-          GCAS(ln, nn, ct)
+          GCAS_SYNC(ln, nn, ct)
         }
         cond match {
           case null =>
@@ -358,7 +385,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
                 // Go down one level in recursion
                 in.rec_remove(k, v, hc, lev + 5, this, startgen, ct)
               else {
-                if (GCAS(cn, cn.renewed(startgen, ct), ct))
+                if (GCAS_SYNC(cn, cn.renewed(startgen, ct), ct))
                   // Succesfully updated the generation, retry current invocation
                   rec_remove(k, v, hc, lev, parent, startgen, ct)
                 else
@@ -368,7 +395,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
             case sn: SNode[K, V] =>
               if (sn.hc == hc && sn.k == k && (v == null || sn.v == v)) {
                 val ncn = cn.removedAt(pos, flag, gen).toContracted(lev)
-                if (GCAS(cn, ncn, ct))
+                if (GCAS_SYNC(cn, ncn, ct))
                   // Found and removed the key, return the previous value
                   Some(sn.v)
                 else
@@ -401,7 +428,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
                         // Will shrink TNodes under cn into cn, and if cn contains only one SNode after the operation,
                         // toContracted will return a TNode instead of a CNode. (which will cause the parent's parent shrink also)
                         val ncn = cn.updatedAt(pos, tn.copyUntombed, gen).toContracted(lev - 5)
-                        if (!parent.GCAS(cn, ncn, ct))
+                        if (!parent.GCAS_SYNC(cn, ncn, ct))
                           // Retry cleanup, maybe the Gen changed or there was a concurrent modification
                           if (ct.READ_ROOT().gen == startgen) return cleanParent(nonlive)
                     }
@@ -428,7 +455,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
         if (v == null) {
           val optv = ln.get(k)
           val nn = ln.removed(k)
-          if (GCAS(ln, nn, ct))
+          if (GCAS_SYNC(ln, nn, ct))
             return optv
           else
             return null
@@ -436,7 +463,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
         else ln.get(k) match {
           case optv@Some(v0) if v0 == v =>
             val nn = ln.removed(k)
-            if (GCAS(ln, nn, ct))
+            if (GCAS_SYNC(ln, nn, ct))
               // Successfully removed from LNode
               return optv
             else
@@ -453,7 +480,7 @@ final class INode[K, V](bn: MainNode[K, V], g: Gen) extends BasicNode {
     // TODO: Lock nd, then do this
     val m = nd.READ_MAIN()
     m match {
-      case cn: CNode[K, V] => nd.GCAS(cn, cn.toCompressed(ct, lev, gen), ct)
+      case cn: CNode[K, V] => nd.GCAS_SYNC(cn, cn.toCompressed(ct, lev, gen), ct)
       case _ =>
     }
   }
