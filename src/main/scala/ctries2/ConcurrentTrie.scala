@@ -587,7 +587,7 @@ extends ConcurrentMap[K, V]
     }
   }
   
-  @tailrec private def RDCSS_Complete(abort: Boolean): INode[K, V] = {
+  @tailrec private final def RDCSS_Complete(abort: Boolean): INode[K, V] = {
     val v = /*READ*/root
     v match {
       case in: INode[K, V] => in
