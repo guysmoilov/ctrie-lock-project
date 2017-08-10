@@ -64,9 +64,8 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
   private final val NO_BACKUP_FUNC : MainNode[K,V] => Option[MainNode[K,V]] = (_) => None
 
   /**
-    * GCAS_SYNC without a backup generator
+    * GCAS_SYNC without a backup generator, for when we don't care about failures
     */
-  @Deprecated
   @inline private final def GCAS_SYNC(expected: MainNode[K,V],
                                       newMain: MainNode[K,V],
                                       ct: ConcurrentTrie[K,V]) : Boolean =
@@ -88,7 +87,11 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
       // No need to use READ_MAIN(), since we hold the lock
       val currMain = mainnode
       aboutToWrite = true
-      if (this.gen == ct.READ_ROOT().gen) {
+      if (this.gen != ct.READ_ROOT().gen) {
+        aboutToWrite = false
+        /*return*/ GcasResult.GEN_FAIL
+      }
+      else {
         if (currMain == expected) {
           WRITE_MAIN(newMain)
           aboutToWrite = false
@@ -102,7 +105,7 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
           // Only benchmarks will tell.
           val optionalBackup = backupGen(currMain)
           optionalBackup match {
-            case b : Some[MainNode[K,V]] => {
+            case b: Some[MainNode[K, V]] => {
               WRITE_MAIN(b.get)
               aboutToWrite = false
               /*return*/ GcasResult.SUCCESS
@@ -113,10 +116,6 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
             }
           }
         }
-      }
-      else {
-        aboutToWrite = false
-        /*return*/ GcasResult.GEN_FAIL
       }
     }
   }
@@ -137,16 +136,46 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
     case ln2: LNode[K, V] => Option.apply(ln2)
   }
 
+  /**
+    * More or less repeats the logic in rec_insert, but without GCAS operations.
+    * The insertion should fail only if it turns out that:
+    * 1) We need to traverse deeper in the tree (CNode at target position contains a subtree)
+    * 2) Or the INode is already dead (mainnode == TNode)
+    */
   @inline private def insertBackupGenerator(k: K, v: V, hc: Int, lev: Int, parent: INode[K, V],
                                              startgen: Gen, ct: ConcurrentTrie[K, V])
   : (MainNode[K, V]) => Option[MainNode[K, V]] = {
-    case cn2: CNode[K,V] => {
-      // TODO: Repeat insert logic. If can insert directly into cn2, do so.
-      // If need to go into a sub-tree, return None
-      None
+    case tn: TNode[K,V] => /*return*/ None // Cleanup required
+    case ln: LNode[K,V] => /*return*/ Option.apply(ln.inserted(k,v))
+    case cn: CNode[K,V] => {
+      val idx = (hc >>> lev) & 0x1f
+      val flag = 1 << idx
+      val bmp = cn.bitmap
+      val mask = flag - 1
+      val pos = Integer.bitCount(bmp & mask)
+      if ((bmp & flag) != 0) {
+        cn.array(pos) match {
+          case in: INode[K, V] => None // Need to exit the critical section and traverse down the tree
+          case sn: SNode[K, V] => {
+            if (sn.hc == hc && sn.k == k) {
+              // Replace existing value
+              /*return*/ Option.apply(cn.updatedAt(pos, new SNode(k, v, hc), gen))
+            }
+            else {
+              // Hash collision, create new tree level or LNode
+              val oldCnode = if (cn.gen eq gen) cn else cn.renewed(gen, ct)
+              val newCnode = CNode.dual(sn, sn.hc, new SNode(k, v, hc), hc, lev + 5, gen)
+              /*return*/ Option.apply(oldCnode.updatedAt(pos, inode(newCnode), gen))
+            }
+          }
+        }
+      }
+      else {
+        // Current CNode doesn't contain the new key k, so just insert it.
+        val rn = if (cn.gen eq gen) cn else cn.renewed(gen, ct)
+        /*return*/ Option.apply(rn.insertedAt(pos, flag, new SNode(k, v, hc), gen))
+      }
     }
-    case tn2: TNode[K,V] => None // Cleanup required
-    case ln2: LNode[K,V] => Option.apply(ln2.inserted(k,v))
   }
 
   /** Inserts a key value pair, overwriting the old pair if the keys match.
@@ -552,11 +581,15 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
     }
   }
 
-  private def clean(nd: INode[K, V], ct: ConcurrentTrie[K, V], lev: Int) {
-    // TODO: Lock nd, then do this
-    val m = nd.READ_MAIN()
+  /**
+    * Note that this in fact cleans the parent, not *this*.
+    * No backup generator used in GCAS_SYNC, since we don't care that much if the cleanup fails -
+    * not worth holding the lock for it.
+    */
+  private def clean(parent: INode[K, V], ct: ConcurrentTrie[K, V], lev: Int) {
+    val m = parent.READ_MAIN()
     m match {
-      case cn: CNode[K, V] => nd.GCAS_SYNC(cn, cn.toCompressed(ct, lev, gen), ct)
+      case cn: CNode[K, V] => parent.GCAS_SYNC(cn, cn.toCompressed(ct, lev, gen), ct)
       case _ =>
     }
   }
