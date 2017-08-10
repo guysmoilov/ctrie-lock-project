@@ -51,7 +51,7 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
   /**
     * The point here is to only return the mainnode from a quiescent point in time - otherwise, a readonly snapshot iterator
     * could interleave with an inserting thread that already decided to overwrite the main node. <br/>
-    * (see [[ctrielock.INode#aboutToWrite]] )
+    * (see [[ctrielock.INode.aboutToWrite]] )
     */
   @inline @tailrec private[ctrielock] final def READ_MAIN(): MainNode[K, V] = {
     val tmp = mainnode
@@ -69,7 +69,7 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
   @inline private final def GCAS_SYNC(expected: MainNode[K,V],
                                       newMain: MainNode[K,V],
                                       ct: ConcurrentTrie[K,V]) : Boolean =
-    GCAS_SYNC(expected, newMain, ct, NO_BACKUP_FUNC) == GcasResult.SUCCESS
+    GCAS_SYNC(expected, newMain, ct, NO_BACKUP_FUNC) == GcasSuccess
 
   /**
     * TODO : Return one of three values here :
@@ -78,6 +78,8 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
     *   <li>failure due to mainnode mismatch (which is recoverable)</li>
     *   <li>failure due to generation mismatch (which is NOT recoverable)</li>
     * </ul>
+    *
+    * In the second part of the tuple, the actual mainnode that was found is returned
     */
   @inline private final def GCAS_SYNC(expected: MainNode[K,V],
                                       newMain: MainNode[K,V],
@@ -89,13 +91,13 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
       aboutToWrite = true
       if (this.gen != ct.READ_ROOT().gen) {
         aboutToWrite = false
-        /*return*/ GcasResult.GEN_FAIL
+        /*return*/ GcasGenFail
       }
       else {
         if (currMain == expected) {
           WRITE_MAIN(newMain)
           aboutToWrite = false
-          /*return*/ GcasResult.SUCCESS
+          /*return*/ GcasSuccess
         }
         else {
           // TODO: I'm worried about 2 things here:
@@ -108,11 +110,11 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
             case b: Some[MainNode[K, V]] => {
               WRITE_MAIN(b.get)
               aboutToWrite = false
-              /*return*/ GcasResult.SUCCESS
+              /*return*/ GcasCompareRecovery(currMain)
             }
             case _ => {
               aboutToWrite = false
-              /*return*/ GcasResult.CAS_FAIL
+              /*return*/ GcasCompareFail(currMain)
             }
           }
         }
@@ -201,7 +203,7 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
                 /*return*/ in.rec_insert(k, v, hc, lev + 5, this, startgen, ct)
               else {
                 val renewResult = GCAS_SYNC(cn, cn.renewed(startgen, ct), ct, renewBackupGenerator(startgen, ct))
-                if (renewResult == GcasResult.SUCCESS)
+                if (renewResult != GcasGenFail)
                   // Retry current invocation
                   /*return*/ rec_insert(k, v, hc, lev, parent, startgen, ct)
                 else
@@ -214,9 +216,9 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
                 // Replace the value of the existing SNode
                 val gcasResult = GCAS_SYNC(cn, cn.updatedAt(pos, new SNode(k, v, hc), gen), ct, backupGenerator)
                 gcasResult match {
-                  case GcasResult.SUCCESS => true
-                  case GcasResult.CAS_FAIL => /* retry */ rec_insert(k, v, hc, lev, parent, startgen, ct)
-                  case GcasResult.GEN_FAIL => /* restart */ false
+                  case GcasSuccess | GcasCompareRecovery(_) => true
+                  case GcasCompareFail(_) => /* retry */ rec_insert(k, v, hc, lev, parent, startgen, ct)
+                  case GcasGenFail => /* restart */ false
                 }
               }
               else {
@@ -226,9 +228,9 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
                 val gcasResult = GCAS_SYNC(cn, nn, ct, backupGenerator)
                 /*return*/
                 gcasResult match {
-                  case GcasResult.SUCCESS => true
-                  case GcasResult.CAS_FAIL => /* retry */ rec_insert(k, v, hc, lev, parent, startgen, ct)
-                  case GcasResult.GEN_FAIL => /* restart */ false
+                  case GcasSuccess | GcasCompareRecovery(_) => true
+                  case GcasCompareFail(_) => /* retry */ rec_insert(k, v, hc, lev, parent, startgen, ct)
+                  case GcasGenFail => /* restart */ false
                 }
               }
           }
@@ -241,23 +243,23 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
           val gcasResult = GCAS_SYNC(cn, ncnode, ct, backupGenerator)
           /*return*/
           gcasResult match {
-            case GcasResult.SUCCESS => true
-            case GcasResult.CAS_FAIL => /* retry */ rec_insert(k, v, hc, lev, parent, startgen, ct)
-            case GcasResult.GEN_FAIL => /* restart */ false
+            case GcasSuccess | GcasCompareRecovery(_) => true
+            case GcasCompareFail(_) => /* retry */ rec_insert(k, v, hc, lev, parent, startgen, ct)
+            case GcasGenFail => /* restart */ false
           }
         }
       case tn: TNode[K, V] =>
         clean(parent, ct, lev - 5)
         /*restart*/ false
       case ln: LNode[K, V] =>
-        val nn = ln.inserted(k, v)
+        val newList = ln.inserted(k, v)
         val backupGenerator = insertBackupGenerator(k, v, hc, lev, parent, startgen, ct)
-        val gcasResult = GCAS_SYNC(ln, nn, ct, backupGenerator)
+        val gcasResult = GCAS_SYNC(ln, newList, ct, backupGenerator)
         /*return*/
         gcasResult match {
-          case GcasResult.SUCCESS => true
-          case GcasResult.CAS_FAIL => /* retry */ rec_insert(k, v, hc, lev, parent, startgen, ct)
-          case GcasResult.GEN_FAIL => /* restart */ false
+          case GcasSuccess | GcasCompareRecovery(_) => true
+          case GcasCompareFail(_) => /* retry */ rec_insert(k, v, hc, lev, parent, startgen, ct)
+          case GcasGenFail => /* restart */ false
         }
     }
   }
@@ -584,11 +586,13 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
   /**
     * Note that this in fact cleans the parent, not *this*.
     * No backup generator used in GCAS_SYNC, since we don't care that much if the cleanup fails -
-    * not worth holding the lock for it.
+    * not worth holding the lock for it. (Also, toCompressed seems to be a very heavy operation)
     */
   private def clean(parent: INode[K, V], ct: ConcurrentTrie[K, V], lev: Int) {
     val m = parent.READ_MAIN()
     m match {
+      // TODO: I don't understand why we give our parent's new CNode this.gen instead of parent.gen
+      // This seems like a bug to me, but it also seems to not really matter - the CNode's gen doesn't mean much.
       case cn: CNode[K, V] => parent.GCAS_SYNC(cn, cn.toCompressed(ct, lev, gen), ct)
       case _ =>
     }
