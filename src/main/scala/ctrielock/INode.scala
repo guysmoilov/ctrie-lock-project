@@ -253,9 +253,8 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
   @inline private final def getPreviousValue(gcasResult: GcasResult, k: K, hc: Int, lev: Int) : Option[V] = {
     gcasResult match {
       case GcasGenFail => /*restart*/ null
-      case GcasCompareRecovery(actualMain) =>
-        // If recovery succeeded, the actualMain can only be a CNode or an LNode
-        actualMain match {
+      case recovery : GcasCompareRecovery[K,V] =>
+        recovery.actualMain match {
           case prevCn: CNode[K,V] =>
             val maybePrevNode = prevCn.getElementAt(hc, lev)
             maybePrevNode match {
