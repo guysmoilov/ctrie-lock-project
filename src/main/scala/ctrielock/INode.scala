@@ -189,35 +189,30 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
                 /*return*/ in.rec_insert(k, v, hc, lev + 5, this, startgen, ct)
               else {
                 val renewResult = GCAS_SYNC(cn, cn.renewed(startgen), ct, renewBackupGenerator(startgen))
-                if (renewResult != GcasGenFail)
-                  // Retry current invocation
-                  /*return*/ rec_insert(k, v, hc, lev, parent, startgen, ct)
-                else
-                  // Retry whole insert operation from root
-                  /*return*/ false
+                renewResult match {
+                  case GcasGenFail => /*restart*/ false
+                  case _ => /*retry*/ rec_insert(k, v, hc, lev, parent, startgen, ct)
+                }
               }
             case sn: SNode[K, V] =>
               val backupGenerator = insertBackupGenerator(k, v, hc, lev)
-              if (sn.hc == hc && sn.k == k) {
-                // Replace the value of the existing SNode
-                val gcasResult = GCAS_SYNC(cn, cn.updatedAt(pos, new SNode(k, v, hc), gen), ct, backupGenerator)
-                gcasResult match {
-                  case GcasSuccess | GcasCompareRecovery(_) => true
-                  case GcasCompareFail(_) => /* retry */ rec_insert(k, v, hc, lev, parent, startgen, ct)
-                  case GcasGenFail => /* restart */ false
+              val newMain = {
+                if (sn.hc == hc && sn.k == k) {
+                  // Replace the value of the existing SNode
+                  cn.updatedAt(pos, new SNode(k, v, hc), gen)
+                }
+                else {
+                  // Hash collision, either create a new subtree or put the two values into an LNode.
+                  val rn = if (cn.gen eq gen) cn else cn.renewed(gen)
+                  rn.updatedAt(pos, inode(CNode.dual(sn, sn.hc, new SNode(k, v, hc), hc, lev + 5, gen)), gen)
                 }
               }
-              else {
-                // Hash collision, either create a new subtree or put the two values into an LNode.
-                val rn = if (cn.gen eq gen) cn else cn.renewed(gen)
-                val nn = rn.updatedAt(pos, inode(CNode.dual(sn, sn.hc, new SNode(k, v, hc), hc, lev + 5, gen)), gen)
-                val gcasResult = GCAS_SYNC(cn, nn, ct, backupGenerator)
-                /*return*/
-                gcasResult match {
-                  case GcasSuccess | GcasCompareRecovery(_) => true
-                  case GcasCompareFail(_) => /* retry */ rec_insert(k, v, hc, lev, parent, startgen, ct)
-                  case GcasGenFail => /* restart */ false
-                }
+              // Replace the value of the existing SNode
+              val gcasResult = GCAS_SYNC(cn, newMain, ct, backupGenerator)
+              gcasResult match {
+                case GcasSuccess | GcasCompareRecovery(_) => true
+                case GcasCompareFail(_) => /* retry */ rec_insert(k, v, hc, lev, parent, startgen, ct)
+                case GcasGenFail => /* restart */ false
               }
           }
         }
@@ -253,8 +248,8 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
   @inline private final def getPreviousValue(gcasResult: GcasResult, k: K, hc: Int, lev: Int) : Option[V] = {
     gcasResult match {
       case GcasGenFail => /*restart*/ null
-      case casFail: GcasCompareResult[K,V] =>
-        casFail.actualMain match {
+      case GcasCompareRecovery(actualMain) =>
+        actualMain.asInstanceOf[MainNode[K,V]] match {
           case prevCn: CNode[K,V] =>
             val maybePrevNode = prevCn.getElementAt(hc, lev)
             maybePrevNode match {
@@ -377,26 +372,23 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
             case sn: SNode[K, V] => cond match {
               case null =>
                 val backupGenerator = insertBackupGenerator(k, v, hc, lev)
-                if (sn.hc == hc && sn.k == k) {
+                val (expectedRetVal, newMain) =
+                  if (sn.hc == hc && sn.k == k) {
+                    // Replacing existing value
+                    (Some(sn.v), cn.updatedAt(pos, new SNode(k, v, hc), gen))
+                  }
+                  else {
+                    // Hashcode collision
+                    val rn = if (cn.gen eq gen) cn else cn.renewed(gen)
+                    (None, rn.updatedAt(pos, inode(CNode.dual(sn, sn.hc, new SNode(k, v, hc), hc, lev + 5, gen)), gen))
+                  }
                   val gcasResult = GCAS_SYNC(cn, cn.updatedAt(pos, new SNode(k, v, hc), gen), ct, backupGenerator)
-                  /*return*/
                   gcasResult match {
-                    case GcasCompareFail(_) => /*retry*/  rec_insertif(k,v,hc,cond,lev,parent,startgen,ct)
                     case GcasSuccess => /*return*/ Some(sn.v) // Replaced existing value, return the previous value
-                    case _ => /*return*/ getPreviousValue(gcasResult, k, hc, lev)
-                  }
-                }
-                else {
-                  // Hashcode collision
-                  val rn = if (cn.gen eq gen) cn else cn.renewed(gen)
-                  val nn = rn.updatedAt(pos, inode(CNode.dual(sn, sn.hc, new SNode(k, v, hc), hc, lev + 5, gen)), gen)
-                  val gcasResult = GCAS_SYNC(cn, nn, ct, backupGenerator)
-                  gcasResult match {
+                    case GcasGenFail => /*restart*/ null
                     case GcasCompareFail(_) => /*retry*/  rec_insertif(k,v,hc,cond,lev,parent,startgen,ct)
-                    case GcasSuccess => /*return*/ None // Didn't replace any value, as expected
-                    case _ => /*return*/ getPreviousValue(gcasResult, k, hc, lev)
+                    case GcasCompareRecovery(_) => /*return*/ getPreviousValue(gcasResult, k, hc, lev)
                   }
-                }
               case INode.KEY_ABSENT =>
                 if (sn.hc == hc && sn.k == k)
                   // Key already exists, return existing value without replacing
@@ -413,7 +405,7 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
                       val previousValue = getPreviousValue(gcasResult, k, hc, lev)
                       previousValue match {
                         // If the CAS failure was due to the key being present, we can immediately return the existing value
-                        case Some(value) => Some(value)
+                        case s @ Some(_) => s
                         // Other failure is due to either TNode or finding a new subtree
                         case _ => /*retry*/ rec_insertif(k,v,hc,cond,lev,parent,startgen,ct)
                       }
@@ -430,8 +422,8 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
                   val gcasResult = GCAS_SYNC(cn, cn.updatedAt(pos, new SNode(k, v, hc), gen), ct, backupGen)
                   gcasResult match {
                     case GcasSuccess => /*return*/ Some(sn.v)
-                    case GcasCompareRecovery(_) => /*return*/ getPreviousValue(gcasResult, k, hc, lev)
                     case GcasGenFail => /*restart*/ null
+                    case GcasCompareRecovery(_) => /*return*/ getPreviousValue(gcasResult, k, hc, lev)
                     case GcasCompareFail(_) =>
                       getPreviousValue(gcasResult, k, hc, lev) match {
                         // Turns out that the value was not present after all, we can skip the retry
@@ -463,12 +455,20 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
           case null | INode.KEY_ABSENT =>
             val rn = if (cn.gen eq gen) cn else cn.renewed(gen)
             val ncnode = rn.insertedAt(pos, flag, new SNode(k, v, hc), gen)
-            if (GCAS_SYNC(cn, ncnode, ct))
-              // Successfully inserted, no previous value
-              /*return*/ None
-            else
-              // Fail (due to either Gen change or concurrent change)
-              /*restart*/ null
+            val gcasResult = GCAS_SYNC(cn, ncnode, ct, insertIfKeyIsAbsentBackupGenerator(k, v, hc, lev))
+            gcasResult match {
+              case GcasSuccess | GcasCompareRecovery(_) => /*return*/ None // Key was absent, insert succeeded
+              case GcasGenFail => /*restart*/ null
+              case GcasCompareFail(_) => {
+                val previousValue = getPreviousValue(gcasResult, k, hc, lev)
+                previousValue match {
+                  // If the CAS failure was due to the key being present, we can immediately return the existing value
+                  case Some(value) => Some(value)
+                  // Other failure is due to either TNode or finding a new subtree
+                  case _ => /*retry*/ rec_insertif(k,v,hc,cond,lev,parent,startgen,ct)
+                }
+              }
+            }
           case INode.KEY_PRESENT => /*return*/ None
           case otherv: V => /*return*/ None
         }
@@ -482,18 +482,33 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
         }
         cond match {
           case null =>
-            val optv = ln.get(k)
-            if (insertln())
-              /*return*/ optv
-            else
-              /*return*/ null
+            val prevValue = ln.get(k)
+            val gcasResult = GCAS_SYNC(ln, ln.inserted(k,v), ct, insertBackupGenerator(k, v, hc, lev))
+            gcasResult match {
+              case GcasSuccess => /*return*/ prevValue
+              case GcasGenFail => /*restart*/ null
+              case GcasCompareFail(_) => /*retry*/ rec_insertif(k,v,hc,cond,lev,parent,startgen,ct)
+              case GcasCompareRecovery(_) => /*return*/ getPreviousValue(gcasResult, k, hc, lev)
+            }
           case INode.KEY_ABSENT =>
             ln.get(k) match {
-              case None => if (insertln())
-                /*return*/ None
-              else
-                /*return*/ null
-              case optv => /*return*/ optv
+              case optv @ Some(_) => /*return*/ optv
+              case None =>
+                val updatedLn = ln.inserted(k,v)
+                val gcasResult = GCAS_SYNC(ln, updatedLn, ct, insertIfKeyIsAbsentBackupGenerator(k,v,hc,lev))
+                gcasResult match {
+                  case GcasSuccess | GcasCompareRecovery(_) => /*return*/ None // Key was absent, insert succeeded
+                  case GcasGenFail => /*restart*/ null
+                  case GcasCompareFail(_) => {
+                    val previousValue = getPreviousValue(gcasResult, k, hc, lev)
+                    previousValue match {
+                      // If the CAS failure was due to the key being present, we can immediately return the existing value
+                      case s @ Some(_) => s
+                      // Other failure is due to either TNode or finding a new subtree
+                      case _ => /*retry*/ rec_insertif(k,v,hc,cond,lev,parent,startgen,ct)
+                    }
+                  }
+                }
             }
           case INode.KEY_PRESENT =>
             ln.get(k) match {
