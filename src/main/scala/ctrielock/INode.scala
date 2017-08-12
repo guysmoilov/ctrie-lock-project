@@ -675,6 +675,56 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
     }
   }
 
+  @inline private def removeBackupGenerator(k: K, hc: Int, lev: Int)
+  : (MainNode[K, V]) => Option[MainNode[K, V]] = {
+    case tn: TNode[K,V] => None
+    case cn: CNode[K,V] =>
+      val (wasFound,flag,pos) = cn.findPositions(hc, lev)
+      if (!wasFound) None
+      else {
+        cn.array(pos) match {
+          case in: INode[K,V] => /*return*/ None
+          case sn: SNode[K,V] =>
+            if (sn.k == k)
+            /*return*/ Option(cn.removedAt(pos, flag, gen))
+            else /*return*/ None
+        }
+      }
+    case ln: LNode[K,V] =>
+      ln.get(k) match {
+        case Some(_) => /*return*/ Option(ln.removed(k))
+        case None => None
+      }
+  }
+
+  @inline private def attemptRemove(expected: MainNode[K, V],
+                                    newMain: MainNode[K, V],
+                                    ct: ConcurrentTrie[K, V],
+                                    k: K, hc: Int, lev: Int): RequiredAction = {
+    val gcasResult = GCAS_SYNC(expected, newMain, ct, removeBackupGenerator(k,hc,lev))
+    gcasResult match {
+      case GcasSuccess => ReturnExpected
+      case GcasGenFail => Restart
+      case GcasCompareFail(_) =>
+        getPreviousValue(gcasResult, k, hc, lev) match {
+          case NoValue =>  Return(None)
+          case SubTree | TombNode => Retry
+          case SomeValue(_) =>
+            assert(assertion = false,
+              "Remove should have recovered - previous value has key %s! %s".format(k, gcasResult))
+            Restart
+        }
+      case GcasCompareRecovery(_) =>
+        getPreviousValue(gcasResult, k, hc, lev) match {
+          case SomeValue(v) => Return(Some(v))
+          case _ =>
+            assert(assertion = false,
+              "Remove should not have recovered - previous value does not have key %s! %s".format(k, gcasResult))
+            Restart
+        }
+    }
+  }
+
   /** Removes the key associated with the given value.
    *
    *  @param v         if null, will remove the key irregardless of the value; otherwise removes only if binding contains that exact key and value
@@ -686,7 +736,7 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
     m match {
       case cn: CNode[K, V] =>
         val (wasFound,flag,pos) = cn.findPositions(hc,lev)
-        if (!wasFound) None
+        if (!wasFound) /*return*/ None
         else {
           val sub = cn.array(pos)
           // The following expression has no "return" commands, because the result is put into "res" instead of exiting
@@ -720,7 +770,7 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
 
           // If removal did nothing (key was not found) or failed completely, then the tree is not changed and there's
           // no reason to cleanup
-          if (res == None || (res eq null))
+          if (res == null || res.isEmpty)
             /*return*/ res
           else {
             // The remove operation succeeded, we may need to clean (shrink) the subtree into the parent's CNode
