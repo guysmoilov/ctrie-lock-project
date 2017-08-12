@@ -4,13 +4,12 @@ package ctries2
 
 
 import org.scalatest._
-import org.scalatest.matchers.ShouldMatchers
-import collection._
-import annotation.tailrec
+
+import scala.collection._
 
 
 
-class SnapshotSpec extends WordSpec with ShouldMatchers {
+class SnapshotSpec extends WordSpec with Matchers {
   
   "A ctrie2" should {
     

@@ -3,12 +3,11 @@ package ctries2
 
 
 import org.scalatest._
-import org.scalatest.matchers.ShouldMatchers
 import collection._
 
 
 
-class IteratorSpec extends WordSpec with ShouldMatchers {
+class IteratorSpec extends WordSpec with Matchers {
   
   "A ctrie2 iterator" should {
     
@@ -17,7 +16,7 @@ class IteratorSpec extends WordSpec with ShouldMatchers {
       val it = ct.iterator
       
       it.hasNext should equal (false)
-      evaluating { it.next() } should produce [NoSuchElementException]
+      an [NoSuchElementException] should be thrownBy{ it.next() }
     }
     
     def nonEmptyIteratorCheck(sz: Int) {
@@ -32,7 +31,7 @@ class IteratorSpec extends WordSpec with ShouldMatchers {
       }
       
       it.hasNext should equal (false)
-      evaluating { it.next() } should produce [NoSuchElementException]
+      an [NoSuchElementException] should be thrownBy{ it.next() }
       tracker.size should equal (sz)
       tracker should equal (ct)
     }
@@ -97,7 +96,7 @@ class IteratorSpec extends WordSpec with ShouldMatchers {
       }
       
       it.hasNext should equal (false)
-      evaluating { it.next() } should produce [NoSuchElementException]
+      an [NoSuchElementException] should be thrownBy{ it.next() }
       tracker.size should equal (sz)
       tracker should equal (ct)
     }

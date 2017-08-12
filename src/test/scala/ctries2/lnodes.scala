@@ -3,11 +3,10 @@ package ctries2
 
 
 import org.scalatest._
-import org.scalatest.matchers.ShouldMatchers
 
 
 
-class LNodeSpec extends WordSpec with ShouldMatchers {
+class LNodeSpec extends WordSpec with Matchers {
   
   val initsz = 1500
   val secondsz = 1750
