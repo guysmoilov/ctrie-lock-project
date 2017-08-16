@@ -4,16 +4,14 @@ package ctries
 
 
 import org.scalatest._
-import org.scalatest.matchers.ShouldMatchers
 
 
-/* disabled!
 case class Wrap(i: Int) {
   override def hashCode = i * 0x9e3775cd
 }
 
 
-class CtrieSpec extends WordSpec with ShouldMatchers {
+class CtrieSpec extends WordSpec with Matchers {
   
   "A ctrie" should {
     
@@ -229,4 +227,3 @@ class CtrieSpec extends WordSpec with ShouldMatchers {
   }
   
 }
-*/

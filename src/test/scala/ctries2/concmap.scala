@@ -1,13 +1,10 @@
 package ctries2
 
 
-
 import org.scalatest._
-import org.scalatest.matchers.ShouldMatchers
 
 
-
-class ConcurrentMapSpec extends WordSpec with ShouldMatchers {
+class ConcurrentMapSpec extends WordSpec with Matchers {
   
   val initsz = 1500
   val secondsz = 2000
