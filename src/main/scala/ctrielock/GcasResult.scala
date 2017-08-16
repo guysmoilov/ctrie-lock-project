@@ -8,6 +8,10 @@ package ctrielock
 sealed trait GcasResult
 
 case object GcasSuccess extends GcasResult
-case class GcasCompareRecovery[K,V](replacedMain: MainNode[K,V]) extends GcasResult
-case class GcasCompareFail[K,V](unexpectedMain: MainNode[K,V]) extends GcasResult
 case object GcasGenFail extends GcasResult
+
+sealed trait GcasCompareResult[K,V] extends GcasResult {
+  val actualMain: MainNode[K,V]
+}
+case class GcasCompareRecovery[K,V](override val actualMain: MainNode[K,V]) extends GcasCompareResult[K,V]
+case class GcasCompareFail[K,V](override val actualMain: MainNode[K,V]) extends GcasCompareResult[K,V]
