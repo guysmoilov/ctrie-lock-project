@@ -162,3 +162,20 @@ object ConcurrentTrie {
     k.hashCode
   }
 }
+
+private[ctrielock] object Debug {
+  import collection._
+
+  lazy val logbuffer = new java.util.concurrent.ConcurrentLinkedQueue[AnyRef]
+
+  def log(s: AnyRef) = logbuffer.add(s)
+
+  def flush() {
+    for (s <- JavaConversions.asScalaIterator(logbuffer.iterator())) Console.out.println(s.toString)
+    logbuffer.clear()
+  }
+
+  def clear() {
+    logbuffer.clear()
+  }
+}

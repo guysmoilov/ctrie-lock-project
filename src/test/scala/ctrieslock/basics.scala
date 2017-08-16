@@ -97,7 +97,7 @@ object CtrieChecks extends Properties("Ctrie") {
     val sz = 102 //numElems
     val ct = new ConcurrentTrie[Wrap, Int]
     err.println("----------------------")
-    Debug.clear()
+    //Debug.clear()
     
     // checker
     val checker = spawn {
@@ -130,7 +130,7 @@ object CtrieChecks extends Properties("Ctrie") {
       Debug.flush()
       err.println("size: " + ct.size)
       err.println(ct.toList.map(_._2).sorted.zip(0 until sz).find(p => p._1 != p._2))
-      err.println(ct.RDCSS_READ_ROOT().mainnode)
+      err.println(ct.READ_ROOT().mainnode)
       err.flush()
     } else err.clear()
     
