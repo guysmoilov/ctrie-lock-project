@@ -204,7 +204,6 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
                 }
               }
             case sn: SNode[K, V] =>
-              val backupGenerator = insertBackupGenerator(k, v, hc, lev)
               val newMain = {
                 if (sn.hc == hc && sn.k == k) {
                   // Replace the value of the existing SNode
@@ -535,7 +534,6 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
                   }
                 }
               case otherV: V =>
-                val backupGenerator = insertIfValueIsPresentBackupGenerator(otherV, k, v, hc, lev)
                 if (sn.hc == hc && sn.k == k && sn.v == otherV) {
                   val updatedCn = cn.updatedAt(pos, new SNode(k, v, hc), gen)
                   attemptInsertIfValuePresent(cn, updatedCn, ct, otherV, k, v, hc, lev) match {
