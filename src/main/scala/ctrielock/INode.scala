@@ -130,7 +130,9 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
 
   @inline private def renewBackupGenerator(startgen: Gen)
   : (MainNode[K, V]) => Option[MainNode[K, V]] = {
-    case cn2: CNode[K, V] => Option(cn2.renewed(startgen))
+    case cn2: CNode[K, V] =>
+      if (cn2.gen == startgen) Option(cn2)
+      else Option(cn2.renewed(startgen))
     case tn2: TNode[K, V] => None // Requires cleanup anyway
     case ln2: LNode[K, V] => Option(ln2)
   }
@@ -852,7 +854,7 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
   }
 
   /* this is a quiescent method! */
-  def string(lev: Int) = "%sINode -> %s".format("  " * lev, mainnode match {
+  def string(lev: Int) = "%sINode -> %s".format("  " * lev, READ_MAIN() match {
     case null => "<null>"
     case tn: TNode[_, _] => "TNode(%s, %s, %d, !)".format(tn.k, tn.v, tn.hc)
     case cn: CNode[_, _] => cn.string(lev)

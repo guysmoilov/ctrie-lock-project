@@ -130,7 +130,7 @@ object CtrieChecks extends Properties("Ctrie") {
       Debug.flush()
       err.println("size: " + ct.size)
       err.println(ct.toList.map(_._2).sorted.zip(0 until sz).find(p => p._1 != p._2))
-      err.println(ct.READ_ROOT().mainnode)
+      err.println(ct.string)
       err.flush()
     } else err.clear()
     

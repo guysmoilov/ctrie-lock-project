@@ -116,7 +116,7 @@ extends MainNode[K, V] {
   /* quiescently consistent - don't call concurrently to anything involving a GCAS!! */
   protected def collectElems: Seq[(K, V)] = array flatMap {
     case sn: SNode[K, V] => Some(sn.kvPair)
-    case in: INode[K, V] => in.mainnode match {
+    case in: INode[K, V] => in.READ_MAIN() match {
       case tn: TNode[K, V] => Some(tn.kvPair)
       case ln: LNode[K, V] => ln.listmap.toList
       case cn: CNode[K, V] => cn.collectElems
