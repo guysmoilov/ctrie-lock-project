@@ -14,10 +14,8 @@ object CTrieMultiThreadLookupBenchmark extends Bench.LocalTime {
     measure method "Lookup" in {
       using(tries) in { ct =>
         for (i <- 0 until sz) ct.update(elems(i), elems(i))
-        val p = par.get
-        val step = sz / p
-
-        val ins = for (i <- 0 until p) yield new Looker(ct, i, step)
+        val step = sz / par
+        val ins = for (i <- 0 until par) yield new Looker(ct, i, step)
 
         for (i <- ins) i.start()
         for (i <- ins) i.join()
@@ -49,10 +47,8 @@ object CTrieLockMultiThreadLookupBenchmark extends Bench.LocalTime {
     measure method "Lookup" in {
       using(tries) in { ct =>
         for (i <- 0 until sz) ct.update(elems(i), elems(i))
-        val p = par.get
-        val step = sz / p
-
-        val ins = for (i <- 0 until p) yield new Looker(ct, i, step)
+        val step = sz / par
+        val ins = for (i <- 0 until par) yield new Looker(ct, i, step)
 
         for (i <- ins) i.start()
         for (i <- ins) i.join()

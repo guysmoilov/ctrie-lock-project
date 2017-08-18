@@ -16,10 +16,8 @@ object CTrieMultiThreadReinsertBenchmark extends Bench.LocalTime {
         for (i <- 0 until sz) ct.update(elems(i), elems(i))
         Runtime.getRuntime.gc()
 
-        val p = par.get
-        val step = sz / p
-
-        val ins = for (i <- 0 until p) yield new Updater(ct, i, step)
+        val step = sz / par
+        val ins = for (i <- 0 until par) yield new Updater(ct, i, step)
 
         for (i <- ins) i.start()
         for (i <- ins) i.join()
@@ -53,10 +51,8 @@ object CTrieLockMultiThreadReinsertBenchmark extends Bench.LocalTime {
         for (i <- 0 until sz) ct.update(elems(i), elems(i))
         Runtime.getRuntime.gc()
 
-        val p = par.get
-        val step = sz / p
-
-        val ins = for (i <- 0 until p) yield new Updater(ct, i, step)
+        val step = sz / par
+        val ins = for (i <- 0 until par) yield new Updater(ct, i, step)
 
         for (i <- ins) i.start()
         for (i <- ins) i.join()

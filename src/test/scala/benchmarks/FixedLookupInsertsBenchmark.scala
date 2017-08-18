@@ -13,10 +13,8 @@ object CTrieFixedLookupInsertsBenchmark extends Bench.LocalTime {
   performance of "FixedLookup" in {
     measure method "Update" in {
       using(tries) in { ct =>
-        val p = par.get
-        val step = sz / p
-
-        val ins = for (i <- 0 until p) yield new Worker(ct, i, step)
+        val step = sz / par
+        val ins = for (i <- 0 until par) yield new Worker(ct, i, step)
 
         for (i <- ins) i.start()
         for (i <- ins) i.join()
@@ -26,7 +24,6 @@ object CTrieFixedLookupInsertsBenchmark extends Bench.LocalTime {
 
   class Worker(ct: ConcurrentTrie[Elem, Elem], n: Int, step: Int) extends Thread {
     override def run() {
-      val ratio = lookupratio.get
       var i = n * step
       val until = (n + 1) * step
       val e = elems
@@ -37,7 +34,7 @@ object CTrieFixedLookupInsertsBenchmark extends Bench.LocalTime {
 
         // do some lookups
         var j = 0
-        while (j < ratio) {
+        while (j < lookupratio) {
           ct.lookup(e(math.abs(j * 0x9e3775cd) % i))
           j += 1
         }
@@ -55,10 +52,8 @@ object CTrieLockFixedLookupInsertsBenchmark extends Bench.LocalTime {
   performance of "FixedLookup" in {
     measure method "Update" in {
       using(tries) in { ct =>
-        val p = par.get
-        val step = sz / p
-
-        val ins = for (i <- 0 until p) yield new Worker(ct, i, step)
+        val step = sz / par
+        val ins = for (i <- 0 until par) yield new Worker(ct, i, step)
 
         for (i <- ins) i.start()
         for (i <- ins) i.join()
@@ -68,7 +63,6 @@ object CTrieLockFixedLookupInsertsBenchmark extends Bench.LocalTime {
 
   class Worker(ct: ConcurrentTrie[Elem, Elem], n: Int, step: Int) extends Thread {
     override def run() {
-      val ratio = lookupratio.get
       var i = n * step
       val until = (n + 1) * step
       val e = elems
@@ -79,7 +73,7 @@ object CTrieLockFixedLookupInsertsBenchmark extends Bench.LocalTime {
 
         // do some lookups
         var j = 0
-        while (j < ratio) {
+        while (j < lookupratio) {
           ct.lookup(e(math.abs(j * 0x9e3775cd) % i))
           j += 1
         }

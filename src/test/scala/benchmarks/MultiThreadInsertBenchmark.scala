@@ -13,10 +13,8 @@ object CTrieMultiThreadInsertBenchmark extends Bench.LocalTime {
   performance of "MultiThread" in {
     measure method "Insert" in {
       using(tries) in { ct =>
-        val p = par.get
-        val step = sz / p
-
-        val ins = for (i <- 0 until p) yield new Updater(ct, i, step)
+        val step = sz / par
+        val ins = for (i <- 0 until par) yield new Updater(ct, i, step)
 
         for (i <- ins) i.start()
         for (i <- ins) i.join()
@@ -47,10 +45,8 @@ object CTrieLockMultiThreadInsertBenchmark extends Bench.LocalTime {
   performance of "MultiThread" in {
     measure method "Insert" in {
       using(tries) in { ct =>
-        val p = par.get
-        val step = sz / p
-
-        val ins = for (i <- 0 until p) yield new Updater(ct, i, step)
+        val step = sz / par
+        val ins = for (i <- 0 until par) yield new Updater(ct, i, step)
 
         for (i <- ins) i.start()
         for (i <- ins) i.join()

@@ -10,17 +10,15 @@ object CTrieMultiThreadUpdateBenchmark extends Bench.LocalTime {
   val seeds: Gen[Int] = Gen.range("seed")(0, rep, 1)
   val tries: Gen[ConcurrentTrie[Elem, Elem]] = for (seed <- seeds) yield new ConcurrentTrie[Elem, Elem]
 
-  val array: Array[Int] = Array.fill(lookups.get)(0) ++ Array.fill(inserts.get)(1) ++ Array.fill(removes.get)(2)
+  val array: Array[Int] = Array.fill(lookups)(0) ++ Array.fill(inserts)(1) ++ Array.fill(removes)(2)
 
   performance of "MultiThread" in {
     measure method "Update" in {
       using(tries) in { ct =>
         if (updateFilled) for (i <- 0 until sz) ct.put(elems(i), elems(i))
 
-        val p = par.get
-        val howmany = totalops.get / p
-
-        val ws = for (i <- 0 until p) yield new Worker(ct, i, howmany)
+        val howmany = totalops / par
+        val ws = for (i <- 0 until par) yield new Worker(ct, i, howmany)
 
         for (i <- ws) i.start()
         for (i <- ws) i.join()
@@ -57,17 +55,15 @@ object CTrieLockMultiThreadUpdateBenchmark extends Bench.LocalTime {
   val seeds: Gen[Int] = Gen.range("seed")(0, rep, 1)
   val tries: Gen[ConcurrentTrie[Elem, Elem]] = for (seed <- seeds) yield new ConcurrentTrie[Elem, Elem]
 
-  val array: Array[Int] = Array.fill(lookups.get)(0) ++ Array.fill(inserts.get)(1) ++ Array.fill(removes.get)(2)
+  val array: Array[Int] = Array.fill(lookups)(0) ++ Array.fill(inserts)(1) ++ Array.fill(removes)(2)
 
   performance of "MultiThread" in {
     measure method "Update" in {
       using(tries) in { ct =>
         if (updateFilled) for (i <- 0 until sz) ct.put(elems(i), elems(i))
 
-        val p = par.get
-        val howmany = totalops.get / p
-
-        val ws = for (i <- 0 until p) yield new Worker(ct, i, howmany)
+        val howmany = totalops / par
+        val ws = for (i <- 0 until par) yield new Worker(ct, i, howmany)
 
         for (i <- ws) i.start()
         for (i <- ws) i.join()

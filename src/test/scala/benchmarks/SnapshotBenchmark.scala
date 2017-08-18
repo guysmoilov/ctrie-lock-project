@@ -8,7 +8,7 @@ import test.scala.benchmarks.Global._
 object CTrieSnapshotBenchmark extends Bench.LocalTime {
   import ctries2.ConcurrentTrie
 
-  val seeds: Gen[Int] = Gen.range("seed")(0, rep, 1)
+  val seeds: Gen[Int] = Gen.range("seed")(0, 1, 1)
   val tries: Gen[ConcurrentTrie[Elem, Elem]] = for (seed <- seeds) yield new ConcurrentTrie[Elem, Elem]
 
   performance of "CTrieSnapshot" in {
@@ -66,10 +66,8 @@ object CTrieSnapshotBenchmark extends Bench.LocalTime {
     measure method "RemoveMultiple" in {
       using(tries) in { ct =>
         for (i <- 0 until sz) ct.update(elems(i), elems(i))
-        val p = par.get
-        val step = sz / p
-
-        val ins = for (i <- 0 until p) yield new Remover(ct, i, step)
+        val step = sz / par
+        val ins = for (i <- 0 until par) yield new Remover(ct, i, step)
 
         for (i <- ins) i.start()
         for (i <- ins) i.join()
@@ -81,11 +79,9 @@ object CTrieSnapshotBenchmark extends Bench.LocalTime {
     measure method "RemoveMultipleWithSnapshot" in {
       using(tries) in { ct =>
         for (i <- 0 until sz) ct.update(elems(i), elems(i))
-        val p = par.get
-        val step = sz / p
+        val step = sz / par
         val snap = ct.snapshot()
-
-        val ins = for (i <- 0 until p) yield new Remover(snap, i, step)
+        val ins = for (i <- 0 until par) yield new Remover(snap, i, step)
 
         for (i <- ins) i.start()
         for (i <- ins) i.join()
@@ -110,10 +106,8 @@ object CTrieSnapshotBenchmark extends Bench.LocalTime {
     measure method "LookupSingle" in {
       using(tries) in { ct =>
         for (i <- 0 until sz) ct.update(elems(i), elems(i))
-        val p = par.get
-        val step = sz / p
-
-        val ins = for (i <- 0 until p) yield new Looker(ct, i, step)
+        val step = sz / par
+        val ins = for (i <- 0 until par) yield new Looker(ct, i, step)
 
         for (i <- ins) i.start()
         for (i <- ins) i.join()
@@ -125,11 +119,9 @@ object CTrieSnapshotBenchmark extends Bench.LocalTime {
     measure method "LookupSingleWithSnapshot" in {
       using(tries) in { ct =>
         for (i <- 0 until sz) ct.update(elems(i), elems(i))
-        val p = par.get
-        val step = sz / p
+        val step = sz / par
         val snap = ct.snapshot()
-
-        val ins = for (i <- 0 until p) yield new Looker(snap, i, step)
+        val ins = for (i <- 0 until par) yield new Looker(snap, i, step)
 
         for (i <- ins) i.start()
         for (i <- ins) i.join()
@@ -199,10 +191,8 @@ object CTrieLockSnapshotBenchmark extends Bench.LocalTime {
     measure method "RemoveMultiple" in {
       using(tries) in { ct =>
         for (i <- 0 until sz) ct.update(elems(i), elems(i))
-        val p = par.get
-        val step = sz / p
-
-        val ins = for (i <- 0 until p) yield new Remover(ct, i, step)
+        val step = sz / par
+        val ins = for (i <- 0 until par) yield new Remover(ct, i, step)
 
         for (i <- ins) i.start()
         for (i <- ins) i.join()
@@ -214,11 +204,9 @@ object CTrieLockSnapshotBenchmark extends Bench.LocalTime {
     measure method "RemoveMultipleWithSnapshot" in {
       using(tries) in { ct =>
         for (i <- 0 until sz) ct.update(elems(i), elems(i))
-        val p = par.get
-        val step = sz / p
+        val step = sz / par
         val snap = ct.snapshot()
-
-        val ins = for (i <- 0 until p) yield new Remover(snap, i, step)
+        val ins = for (i <- 0 until par) yield new Remover(snap, i, step)
 
         for (i <- ins) i.start()
         for (i <- ins) i.join()
@@ -243,10 +231,8 @@ object CTrieLockSnapshotBenchmark extends Bench.LocalTime {
     measure method "LookupSingle" in {
       using(tries) in { ct =>
         for (i <- 0 until sz) ct.update(elems(i), elems(i))
-        val p = par.get
-        val step = sz / p
-
-        val ins = for (i <- 0 until p) yield new Looker(ct, i, step)
+        val step = sz / par
+        val ins = for (i <- 0 until par) yield new Looker(ct, i, step)
 
         for (i <- ins) i.start()
         for (i <- ins) i.join()
@@ -258,11 +244,9 @@ object CTrieLockSnapshotBenchmark extends Bench.LocalTime {
     measure method "LookupSingleWithSnapshot" in {
       using(tries) in { ct =>
         for (i <- 0 until sz) ct.update(elems(i), elems(i))
-        val p = par.get
-        val step = sz / p
+        val step = sz / par
         val snap = ct.snapshot()
-
-        val ins = for (i <- 0 until p) yield new Looker(snap, i, step)
+        val ins = for (i <- 0 until par) yield new Looker(snap, i, step)
 
         for (i <- ins) i.start()
         for (i <- ins) i.join()

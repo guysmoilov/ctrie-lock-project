@@ -13,9 +13,8 @@ object CTrieLookupInsertBenchmark extends Bench.LocalTime {
   performance of "LookupInsert" in {
     measure method "Regular" in {
       using(tries) in { ct =>
-        val p = par.get
-        val step = sz / p
-        val ins = for (i <- 0 until p) yield new Worker(ct, i, step)
+        val step = sz / par
+        val ins = for (i <- 0 until par) yield new Worker(ct, i, step)
 
         for (i <- ins) i.start()
         for (i <- ins) i.join()
@@ -25,7 +24,6 @@ object CTrieLookupInsertBenchmark extends Bench.LocalTime {
 
   class Worker(ct: ConcurrentTrie[Elem, Elem], n: Int, step: Int) extends Thread {
     override def run() {
-      val ratio = lookupratio.get
       var i = n * step
       val until = (n + 1) * step
       val e = elems
@@ -36,7 +34,7 @@ object CTrieLookupInsertBenchmark extends Bench.LocalTime {
 
         // do some lookups
         var j = 0
-        while (j < ratio) {
+        while (j < lookupratio) {
           ct.lookup(e(math.abs(j * 0x9e3775cd) % i))
           j += 1
         }
@@ -54,9 +52,8 @@ object CTrieLockLookupInsertBenchmark extends Bench.LocalTime {
   performance of "LookupInsert" in {
     measure method "Regular" in {
       using(tries) in { ct =>
-        val p = par.get
-        val step = sz / p
-        val ins = for (i <- 0 until p) yield new Worker(ct, i, step)
+        val step = sz / par
+        val ins = for (i <- 0 until par) yield new Worker(ct, i, step)
 
         for (i <- ins) i.start()
         for (i <- ins) i.join()
@@ -66,7 +63,6 @@ object CTrieLockLookupInsertBenchmark extends Bench.LocalTime {
 
   class Worker(ct: ConcurrentTrie[Elem, Elem], n: Int, step: Int) extends Thread {
     override def run() {
-      val ratio = lookupratio.get
       var i = n * step
       val until = (n + 1) * step
       val e = elems
@@ -77,7 +73,7 @@ object CTrieLockLookupInsertBenchmark extends Bench.LocalTime {
 
         // do some lookups
         var j = 0
-        while (j < ratio) {
+        while (j < lookupratio) {
           ct.lookup(e(math.abs(j * 0x9e3775cd) % i))
           j += 1
         }
