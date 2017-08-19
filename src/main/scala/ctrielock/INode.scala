@@ -677,7 +677,7 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
     }
   }
 
-  @inline private def removeBackupGenerator(k: K, hc: Int, lev: Int)
+  @inline private def removeBackupGenerator(k: K, v: V, hc: Int, lev: Int)
   : (MainNode[K, V]) => Option[MainNode[K, V]] = {
     case tn: TNode[K,V] => None
     case cn: CNode[K,V] =>
@@ -687,23 +687,23 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
         cn.array(pos) match {
           case in: INode[K,V] => /*return*/ None
           case sn: SNode[K,V] =>
-            if (sn.k == k)
+            if (sn.hc == hc && sn.k == k && (v == null || sn.v == v))
             /*return*/ Option(cn.removedAt(pos, flag, gen))
             else /*return*/ None
         }
       }
     case ln: LNode[K,V] =>
       ln.get(k) match {
-        case Some(_) => /*return*/ Option(ln.removed(k))
-        case None => None
+        case Some(prevV) if v == null || prevV == v => /*return*/ Option(ln.removed(k))
+        case _ => /*return*/ None
       }
   }
 
   @inline private def attemptRemove(expected: MainNode[K, V],
                                     newMain: MainNode[K, V],
                                     ct: ConcurrentTrie[K, V],
-                                    k: K, hc: Int, lev: Int): RequiredAction = {
-    val gcasResult = GCAS_SYNC(expected, newMain, ct, removeBackupGenerator(k,hc,lev))
+                                    k: K, v: V, hc: Int, lev: Int): RequiredAction = {
+    val gcasResult = GCAS_SYNC(expected, newMain, ct, removeBackupGenerator(k,v,hc,lev))
     gcasResult match {
       case GcasSuccess => ReturnExpected
       case GcasGenFail => Restart
@@ -711,14 +711,11 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
         getPreviousValue(gcasResult, k, hc, lev) match {
           case NoValue =>  Return(None)
           case SubTree | TombNode => Retry
-          case SomeValue(_) =>
-            assert(assertion = false,
-              "Remove should have recovered - previous value has key %s! %s".format(k, gcasResult))
-            Restart
+          case SomeValue(_) => Return(None) // Can happen if v != null && existing value != v
         }
       case GcasCompareRecovery(_) =>
         getPreviousValue(gcasResult, k, hc, lev) match {
-          case SomeValue(v) => Return(Some(v))
+          case SomeValue(prevV) => Return(Some(prevV))
           case _ =>
             assert(assertion = false,
               "Remove should not have recovered - previous value does not have key %s! %s".format(k, gcasResult))
@@ -735,106 +732,93 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
   final def rec_remove(k: K, v: V, hc: Int, lev: Int, parent: INode[K, V], startgen: Gen, ct: ConcurrentTrie[K, V]): Option[V] = {
     val m = READ_MAIN() // use -Yinline!
 
-    m match {
+    // The following expression has no "return" commands, because the result is put into "res" instead of exiting
+    // the whole method.
+    val res = m match {
       case cn: CNode[K, V] =>
         val (wasFound,flag,pos) = cn.findPositions(hc,lev)
         if (!wasFound) /*return*/ None
         else {
           val sub = cn.array(pos)
-          // The following expression has no "return" commands, because the result is put into "res" instead of exiting
-          // the whole method.
-          val res = sub match {
+          sub match {
             case in: INode[K, V] =>
               if (startgen eq in.gen)
                 // Go down one level in recursion
                 in.rec_remove(k, v, hc, lev + 5, this, startgen, ct)
               else {
-                if (GCAS_SYNC(cn, cn.renewed(startgen), ct))
-                  // Succesfully updated the generation, retry current invocation
-                  rec_remove(k, v, hc, lev, parent, startgen, ct)
-                else
-                  // Failed generation chane, return failure (will retry from root)
-                  null
+                attemptGenerationUpdate(cn, startgen, ct) match {
+                  case Retry => rec_remove(k, v, hc, lev, parent, startgen, ct)
+                  case _ => /*restart*/ null
+                }
               }
             case sn: SNode[K, V] =>
               if (sn.hc == hc && sn.k == k && (v == null || sn.v == v)) {
                 val ncn = cn.removedAt(pos, flag, gen).toContracted(lev)
-                if (GCAS_SYNC(cn, ncn, ct))
-                  // Found and removed the key, return the previous value
-                  Some(sn.v)
-                else
-                  // Failed to remove the value, either due to Gen change or concurrent changes, return failure (retry from root)
-                  null
+                attemptRemove(cn, ncn, ct, k, v, hc, lev) match {
+                  case ReturnExpected => Some(sn.v)
+                  case Return(optV) => optV.asInstanceOf[Option[V]]
+                  case Retry => rec_remove(k, v, hc, lev, parent, startgen, ct)
+                  case Restart => null
+                }
               }
               // Key to remove was not found, return
               else None
-          }
-
-          // If removal did nothing (key was not found) or failed completely, then the tree is not changed and there's
-          // no reason to cleanup
-          if (res == null || res.isEmpty)
-            /*return*/ res
-          else {
-            // The remove operation succeeded, we may need to clean (shrink) the subtree into the parent's CNode
-            @tailrec def cleanParent(nonlive: AnyRef) {
-              val pm = parent.READ_MAIN()
-              pm match {
-                case cn: CNode[K, V] =>
-                  val parentLevel = lev - 5
-                  val (wasFound,flag,pos) = cn.findPositions(hc, parentLevel)
-                  if (!wasFound) {} // somebody already removed this i-node, we're done
-                  else {
-                    val sub = cn.array(pos)
-                    if (sub eq this) nonlive match {
-                      case tn: TNode[K, V] =>
-                        // Will shrink TNodes under cn into cn, and if cn contains only one SNode after the operation,
-                        // toContracted will return a TNode instead of a CNode. (which will cause the parent's parent shrink also)
-                        val ncn = cn.updatedAt(pos, tn.copyUntombed, gen).toContracted(lev - 5)
-                        if (!parent.GCAS_SYNC(cn, ncn, ct))
-                          // Retry cleanup, maybe the Gen changed or there was a concurrent modification
-                          if (ct.READ_ROOT().gen == startgen) /*return*/ cleanParent(nonlive)
-                    }
-                  }
-                case _ => /*return*/ // parent is no longer a cnode, we're done (some other thread already cleaned up)
-              }
-            }
-
-            if (parent ne null) { // never tomb at root
-              val n = READ_MAIN()
-              if (n.isInstanceOf[TNode[_, _]])
-                cleanParent(n)
-            }
-
-            // After cleanup, we still nedd to return the actual value we removed.
-            /*return*/ res
           }
         }
       case tn: TNode[K, V] =>
         clean(parent, ct, lev - 5)
         // Retry from root
-        /*return*/ null
+        null
       case ln: LNode[K, V] =>
-        if (v == null) {
-          val optv = ln.get(k)
-          val nn = ln.removed(k)
-          if (GCAS_SYNC(ln, nn, ct))
-            /*return*/ optv
-          else
-            /*return*/ null
+        ln.get(k) match {
+          case optV@Some(prevV) if v == null || prevV == v =>
+            attemptRemove(ln, ln.removed(k), ct, k, v, hc, lev) match {
+              case ReturnExpected => /*return*/ optV
+              case Return(other) => /*return*/ other.asInstanceOf[Option[V]]
+              case Retry => rec_remove(k, v, hc, lev, parent, startgen, ct)
+              case Restart => null
+            }
+          // Key not found or value mismatch
+          case _ => /*return*/ None
         }
-        else ln.get(k) match {
-          case optv@Some(v0) if v0 == v =>
-            val nn = ln.removed(k)
-            if (GCAS_SYNC(ln, nn, ct))
-              // Successfully removed from LNode
-              /*return*/ optv
-            else
-              // Failed either due to Gen change or concurrent modification, retry from root
-              /*return*/ null
-          case _ =>
-            // LNode doesn't contain the key, nothing to remove
-            /*return*/ None
+    }
+
+    // If removal did nothing (key was not found) or failed completely, then the tree is not changed and there's
+    // no reason to cleanup. Also, if this INode is the root there's no parent to clean.
+    if ((parent eq null) || res == null || res.isEmpty) /*return*/ res
+    else {
+      // The remove operation succeeded, we may need to clean (shrink) the subtree into the parent's CNode
+      @tailrec def cleanParent(tn: TNode[K,V]) {
+        // TODO: cleanParentBackupGenerator
+        val pm = parent.READ_MAIN()
+        pm match {
+          case cn: CNode[K, V] =>
+            val parentLevel = lev - 5
+            val (wasFound,_,pos) = cn.findPositions(hc, parentLevel)
+            if (!wasFound) {} // somebody already removed this i-node, we're done
+            else {
+              // Check that we are still children of the parent, otherwise there's no point cleaning
+              val sub = cn.array(pos)
+              if (sub eq this) {
+                // Will shrink TNodes under cn into cn, and if cn contains only one SNode after the operation,
+                // toContracted will return a TNode instead of a CNode. (which will cause the parent's parent shrink also)
+                val ncn = cn.updatedAt(pos, tn.copyUntombed, gen).toContracted(lev - 5)
+                if (!parent.GCAS_SYNC(cn, ncn, ct))
+                // Retry cleanup, maybe the Gen changed or there was a concurrent modification
+                  if (ct.READ_ROOT().gen == startgen) /*return*/ cleanParent(tn)
+              }
+            }
+          case _ => /*return*/ // parent is no longer a cnode, we're done (some other thread already cleaned up)
         }
+      }
+
+      // Only clean if the removal we just performed caused us to become a TNode.
+      READ_MAIN() match {
+        case tn: TNode[K,V] => cleanParent(tn)
+      }
+
+      // After cleanup, we still need to return the actual value we removed.
+      /*return*/ res
     }
   }
 
