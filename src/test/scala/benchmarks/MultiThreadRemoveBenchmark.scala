@@ -7,12 +7,24 @@ import Global._
 object CTrieMultiThreadRemoveBenchmark extends Bench.LocalTime {
   import ctries2.ConcurrentTrie
 
-  val seeds: Gen[Int] = Gen.range("seed")(0, rep, 1)
-  val tries: Gen[ConcurrentTrie[Elem, Elem]] = for (seed <- seeds) yield new ConcurrentTrie[Elem, Elem]
+  var ct = new ConcurrentTrie[Elem, Elem]
+  val runs: Gen[Int] = Gen.single("run")(rep)
+
+  override def defaultConfig: Context = Context(
+    exec.minWarmupRuns -> minWarmupRuns,            // minimum num of warmups
+    exec.benchRuns -> benchRuns,                    // desired num of measurements
+    exec.independentSamples -> independentSamples   // number of JVM instances
+  )
 
   performance of "MultiThread" in {
     measure method "Remove" in {
-      using(tries) in { ct =>
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test Remove")
+      } afterTests {
+        if(debug) println("Finished Remove")
+      } in { _ =>
         for (i <- 0 until sz) ct.update(elems(i), elems(i))
         val step = sz / par
         val ins = for (i <- 0 until par) yield new Remover(ct, i, step)
@@ -40,12 +52,24 @@ object CTrieMultiThreadRemoveBenchmark extends Bench.LocalTime {
 object CTrieLockMultiThreadRemoveBenchmark extends Bench.LocalTime {
   import ctrielock.ConcurrentTrie
 
-  val seeds: Gen[Int] = Gen.range("seed")(0, rep, 1)
-  val tries: Gen[ConcurrentTrie[Elem, Elem]] = for (seed <- seeds) yield new ConcurrentTrie[Elem, Elem]
+  var ct = new ConcurrentTrie[Elem, Elem]
+  val runs = Gen.single("run")(rep)
+
+  override def defaultConfig: Context = Context(
+    exec.minWarmupRuns -> minWarmupRuns,            // minimum num of warmups
+    exec.benchRuns -> benchRuns,                    // desired num of measurements
+    exec.independentSamples -> independentSamples   // number of JVM instances
+  )
 
   performance of "MultiThread" in {
     measure method "Remove" in {
-      using(tries) in { ct =>
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test Remove")
+      } afterTests {
+        if(debug) println("Finished Remove")
+      } in { _ =>
         for (i <- 0 until sz) ct.update(elems(i), elems(i))
         val step = sz / par
         val ins = for (i <- 0 until par) yield new Remover(ct, i, step)

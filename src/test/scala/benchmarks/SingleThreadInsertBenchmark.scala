@@ -7,12 +7,24 @@ import Global._
 object CTrieSingleThreadInsertBenchmark extends Bench.LocalTime {
   import ctries2.ConcurrentTrie
 
-  val seeds: Gen[Int] = Gen.range("seed")(0, rep, 1)
-  val tries: Gen[ConcurrentTrie[Elem, Elem]] = for (seed <- seeds) yield new ConcurrentTrie[Elem, Elem]
+  var ct = new ConcurrentTrie[Elem, Elem]
+  val runs: Gen[Int] = Gen.single("run")(rep)
+
+  override def defaultConfig: Context = Context(
+    exec.minWarmupRuns -> minWarmupRuns,            // minimum num of warmups
+    exec.benchRuns -> benchRuns,                    // desired num of measurements
+    exec.independentSamples -> independentSamples   // number of JVM instances
+  )
 
   performance of "SingleThread" in {
     measure method "Insert" in {
-      using(tries) in { ct =>
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test Insert")
+      } afterTests {
+        if(debug) println("Finished Insert")
+      } in { _ =>
         var i = 0
         val until = sz
         val e = elems
@@ -28,12 +40,24 @@ object CTrieSingleThreadInsertBenchmark extends Bench.LocalTime {
 object CTrieLockSingleThreadInsertBenchmark extends Bench.LocalTime {
   import ctrielock.ConcurrentTrie
 
-  val seeds: Gen[Int] = Gen.range("seed")(0, rep, 1)
-  val tries: Gen[ConcurrentTrie[Elem, Elem]] = for (seed <- seeds) yield new ConcurrentTrie[Elem, Elem]
+  var ct = new ConcurrentTrie[Elem, Elem]
+  val runs: Gen[Int] = Gen.single("run")(rep)
+
+  override def defaultConfig: Context = Context(
+    exec.minWarmupRuns -> minWarmupRuns,            // minimum num of warmups
+    exec.benchRuns -> benchRuns,                    // desired num of measurements
+    exec.independentSamples -> independentSamples   // number of JVM instances
+  )
 
   performance of "SingleThread" in {
     measure method "Insert" in {
-      using(tries) in { ct =>
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test Insert")
+      } afterTests {
+        if(debug) println("Finished Insert")
+      } in { _ =>
         var i = 0
         val until = sz
         val e = elems

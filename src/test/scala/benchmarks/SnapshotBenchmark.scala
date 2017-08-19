@@ -2,49 +2,145 @@ package test.scala.benchmarks
 
 
 import org.scalameter.api._
+import org.scalameter.picklers.noPickler._
 import test.scala.benchmarks.Global._
+import org.scalameter.reporting._
 
 
 object CTrieSnapshotBenchmark extends Bench.LocalTime {
   import ctries2.ConcurrentTrie
 
-  val seeds: Gen[Int] = Gen.range("seed")(0, 1, 1)
-  val tries: Gen[ConcurrentTrie[Elem, Elem]] = for (seed <- seeds) yield new ConcurrentTrie[Elem, Elem]
+  var ct = new ConcurrentTrie[Elem, Elem]
+  val runs: Gen[Int] = Gen.single("run")(rep)
+
+  override def defaultConfig: Context = Context(
+    exec.minWarmupRuns -> minWarmupRuns,            // minimum num of warmups
+    exec.benchRuns -> benchRuns,                    // desired num of measurements
+    exec.independentSamples -> independentSamples   // number of JVM instances
+  )
 
   performance of "CTrieSnapshot" in {
     measure method "RemoveSingle" in {
-      using(tries) in { ct =>
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test RemoveSingle")
+      } afterTests {
+        if(debug) println("Finished tests")
+      } in { _ =>
         for (i <- 1 until sz) ct.put(elems(i), elems(i))
         for (i <- 1 until sz) ct.remove(elems(i))
       }
     }
-  }
 
-  performance of "CTrieSnapshot" in {
     measure method "RemoveSingleWithSnapshot" in {
-      using(tries) in { ct =>
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test RemoveSingleWithSnapshot")
+      } afterTests {
+        if(debug) println("Finished tests")
+      } in { _ =>
         for (i <- 1 until sz) ct.put(elems(i), elems(i))
         val snap = ct.snapshot()
         for (i <- 1 until sz) snap.remove(elems(i))
       }
     }
-  }
 
-  performance of "CTrieSnapshot" in {
     measure method "InsertSingle" in {
-      using(tries) in { ct =>
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test InsertSingle")
+      } afterTests {
+        if(debug) println("Finished tests")
+      } in { _ =>
         for (i <- 0 until sz) ct.update(elems(i), elems(i))
         for (i <- 0 until sz) ct.update(elems(i), elems(i))
       }
     }
-  }
 
-  performance of "CTrieSnapshot" in {
     measure method "InsertSingleWithSnapshot" in {
-      using(tries) in { ct =>
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test InsertSingleWithSnapshot")
+      } afterTests {
+        if(debug) println("Finished tests")
+      } in { _ =>
         for (i <- 0 until sz) ct.update(elems(i), elems(i))
         val snap = ct.snapshot()
         for (i <- 0 until sz) snap.update(elems(i), elems(i))
+      }
+    }
+
+    measure method "RemoveMultiple" in {
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) if(debug) println("Starting test RemoveMultiple")
+      } afterTests {
+        if(debug) println("Finished tests")
+      } in { _ =>
+        for (i <- 0 until sz) ct.update(elems(i), elems(i))
+        val step = sz / par
+        val ins = for (i <- 0 until par) yield new Remover(ct, i, step)
+
+        for (i <- ins) i.start()
+        for (i <- ins) i.join()
+      }
+    }
+
+    measure method "RemoveMultipleWithSnapshot" in {
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test RemoveMultipleWithSnapshot")
+      } afterTests {
+        if(debug) println("Finished tests")
+      } in { _ =>
+        for (i <- 0 until sz) ct.update(elems(i), elems(i))
+        val step = sz / par
+        val snap = ct.snapshot()
+        val ins = for (i <- 0 until par) yield new Remover(snap, i, step)
+
+        for (i <- ins) i.start()
+        for (i <- ins) i.join()
+      }
+    }
+
+    measure method "LookupSingle" in {
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test LookupSingle")
+      } afterTests {
+        if(debug) println("Finished tests")
+      } in { _ =>
+        for (i <- 0 until sz) ct.update(elems(i), elems(i))
+        val step = sz / par
+        val ins = for (i <- 0 until par) yield new Looker(ct, i, step)
+
+        for (i <- ins) i.start()
+        for (i <- ins) i.join()
+      }
+    }
+
+    measure method "LookupSingleWithSnapshot" in {
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test LookupSingleWithSnapshot")
+      } afterTests {
+        if(debug) println("Finished tests")
+      } in { _ =>
+        for (i <- 0 until sz) ct.update(elems(i), elems(i))
+        val step = sz / par
+        val snap = ct.snapshot()
+        val ins = for (i <- 0 until par) yield new Looker(snap, i, step)
+
+        for (i <- ins) i.start()
+        for (i <- ins) i.join()
       }
     }
   }
@@ -62,33 +158,6 @@ object CTrieSnapshotBenchmark extends Bench.LocalTime {
     }
   }
 
-  performance of "CTrieSnapshot" in {
-    measure method "RemoveMultiple" in {
-      using(tries) in { ct =>
-        for (i <- 0 until sz) ct.update(elems(i), elems(i))
-        val step = sz / par
-        val ins = for (i <- 0 until par) yield new Remover(ct, i, step)
-
-        for (i <- ins) i.start()
-        for (i <- ins) i.join()
-      }
-    }
-  }
-
-  performance of "CTrieSnapshot" in {
-    measure method "RemoveMultipleWithSnapshot" in {
-      using(tries) in { ct =>
-        for (i <- 0 until sz) ct.update(elems(i), elems(i))
-        val step = sz / par
-        val snap = ct.snapshot()
-        val ins = for (i <- 0 until par) yield new Remover(snap, i, step)
-
-        for (i <- ins) i.start()
-        for (i <- ins) i.join()
-      }
-    }
-  }
-
   class Looker(ct: ConcurrentTrie[Elem, Elem], n: Int, step: Int) extends Thread {
     override def run() {
       var i = n * step
@@ -101,75 +170,144 @@ object CTrieSnapshotBenchmark extends Bench.LocalTime {
       }
     }
   }
-
-  performance of "CTrieSnapshot" in {
-    measure method "LookupSingle" in {
-      using(tries) in { ct =>
-        for (i <- 0 until sz) ct.update(elems(i), elems(i))
-        val step = sz / par
-        val ins = for (i <- 0 until par) yield new Looker(ct, i, step)
-
-        for (i <- ins) i.start()
-        for (i <- ins) i.join()
-      }
-    }
-  }
-
-  performance of "CTrieSnapshot" in {
-    measure method "LookupSingleWithSnapshot" in {
-      using(tries) in { ct =>
-        for (i <- 0 until sz) ct.update(elems(i), elems(i))
-        val step = sz / par
-        val snap = ct.snapshot()
-        val ins = for (i <- 0 until par) yield new Looker(snap, i, step)
-
-        for (i <- ins) i.start()
-        for (i <- ins) i.join()
-      }
-    }
-  }
 }
+
 
 object CTrieLockSnapshotBenchmark extends Bench.LocalTime {
   import ctrielock.ConcurrentTrie
 
-  val seeds: Gen[Int] = Gen.range("seed")(0, rep, 1)
-  val tries: Gen[ConcurrentTrie[Elem, Elem]] = for (seed <- seeds) yield new ConcurrentTrie[Elem, Elem]
+  var ct = new ConcurrentTrie[Elem, Elem]
+  val runs: Gen[Int] = Gen.single("run")(rep)
 
-  performance of "CTrieSnapshot" in {
+  override def defaultConfig: Context = Context(
+    exec.minWarmupRuns -> minWarmupRuns,            // minimum num of warmups
+    exec.benchRuns -> benchRuns,                    // desired num of measurements
+    exec.independentSamples -> independentSamples   // number of JVM instances
+    //    Key.reports.resultDir -> "target/benchmarks/memory"
+  )
+
+  performance of "CTrieLockSnapshot" in {
     measure method "RemoveSingle" in {
-      using(tries) in { ct =>
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test RemoveSingle")
+      } afterTests {
+        if(debug) println("Finished tests")
+      } in { _ =>
         for (i <- 1 until sz) ct.put(elems(i), elems(i))
         for (i <- 1 until sz) ct.remove(elems(i))
       }
     }
-  }
 
-  performance of "CTrieSnapshot" in {
     measure method "RemoveSingleWithSnapshot" in {
-      using(tries) in { ct =>
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test RemoveSingleWithSnapshot")
+      } afterTests {
+        if(debug) println("Finished tests")
+      } in { _ =>
         for (i <- 1 until sz) ct.put(elems(i), elems(i))
         val snap = ct.snapshot()
         for (i <- 1 until sz) snap.remove(elems(i))
       }
     }
-  }
 
-  performance of "CTrieSnapshot" in {
     measure method "InsertSingle" in {
-      using(tries) in { ct =>
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test InsertSingle")
+      } afterTests {
+        if(debug) println("Finished tests")
+      } in { _ =>
         for (i <- 0 until sz) ct.update(elems(i), elems(i))
         for (i <- 0 until sz) ct.update(elems(i), elems(i))
       }
     }
-  }
 
-  performance of "CTrieSnapshot" in {
     measure method "InsertSingleWithSnapshot" in {
-      using(tries) in { ct =>
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test InsertSingleWithSnapshot")
+      } afterTests {
+        if(debug) println("Finished tests")
+      } in { _ =>
         for (i <- 0 until sz) ct.update(elems(i), elems(i))
         val snap = ct.snapshot()
         for (i <- 0 until sz) snap.update(elems(i), elems(i))
+      }
+    }
+
+    measure method "RemoveMultiple" in {
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) if(debug) println("Starting test RemoveMultiple")
+      } afterTests {
+        if(debug) println("Finished tests")
+      } in { _ =>
+        for (i <- 0 until sz) ct.update(elems(i), elems(i))
+        val step = sz / par
+        val ins = for (i <- 0 until par) yield new Remover(ct, i, step)
+
+        for (i <- ins) i.start()
+        for (i <- ins) i.join()
+      }
+    }
+
+    measure method "RemoveMultipleWithSnapshot" in {
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test RemoveMultipleWithSnapshot")
+      } afterTests {
+        if(debug) println("Finished tests")
+      } in { _ =>
+        for (i <- 0 until sz) ct.update(elems(i), elems(i))
+        val step = sz / par
+        val snap = ct.snapshot()
+        val ins = for (i <- 0 until par) yield new Remover(snap, i, step)
+
+        for (i <- ins) i.start()
+        for (i <- ins) i.join()
+      }
+    }
+
+    measure method "LookupSingle" in {
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test LookupSingle")
+      } afterTests {
+        if(debug) println("Finished tests")
+      } in { _ =>
+        for (i <- 0 until sz) ct.update(elems(i), elems(i))
+        val step = sz / par
+        val ins = for (i <- 0 until par) yield new Looker(ct, i, step)
+
+        for (i <- ins) i.start()
+        for (i <- ins) i.join()
+      }
+    }
+
+    measure method "LookupSingleWithSnapshot" in {
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test LookupSingleWithSnapshot")
+      } afterTests {
+        if(debug) println("Finished tests")
+      } in { _ =>
+        for (i <- 0 until sz) ct.update(elems(i), elems(i))
+        val step = sz / par
+        val snap = ct.snapshot()
+        val ins = for (i <- 0 until par) yield new Looker(snap, i, step)
+
+        for (i <- ins) i.start()
+        for (i <- ins) i.join()
       }
     }
   }
@@ -187,33 +325,6 @@ object CTrieLockSnapshotBenchmark extends Bench.LocalTime {
     }
   }
 
-  performance of "CTrieSnapshot" in {
-    measure method "RemoveMultiple" in {
-      using(tries) in { ct =>
-        for (i <- 0 until sz) ct.update(elems(i), elems(i))
-        val step = sz / par
-        val ins = for (i <- 0 until par) yield new Remover(ct, i, step)
-
-        for (i <- ins) i.start()
-        for (i <- ins) i.join()
-      }
-    }
-  }
-
-  performance of "CTrieSnapshot" in {
-    measure method "RemoveMultipleWithSnapshot" in {
-      using(tries) in { ct =>
-        for (i <- 0 until sz) ct.update(elems(i), elems(i))
-        val step = sz / par
-        val snap = ct.snapshot()
-        val ins = for (i <- 0 until par) yield new Remover(snap, i, step)
-
-        for (i <- ins) i.start()
-        for (i <- ins) i.join()
-      }
-    }
-  }
-
   class Looker(ct: ConcurrentTrie[Elem, Elem], n: Int, step: Int) extends Thread {
     override def run() {
       var i = n * step
@@ -226,32 +337,6 @@ object CTrieLockSnapshotBenchmark extends Bench.LocalTime {
       }
     }
   }
-
-  performance of "CTrieSnapshot" in {
-    measure method "LookupSingle" in {
-      using(tries) in { ct =>
-        for (i <- 0 until sz) ct.update(elems(i), elems(i))
-        val step = sz / par
-        val ins = for (i <- 0 until par) yield new Looker(ct, i, step)
-
-        for (i <- ins) i.start()
-        for (i <- ins) i.join()
-      }
-    }
-  }
-
-  performance of "CTrieSnapshot" in {
-    measure method "LookupSingleWithSnapshot" in {
-      using(tries) in { ct =>
-        for (i <- 0 until sz) ct.update(elems(i), elems(i))
-        val step = sz / par
-        val snap = ct.snapshot()
-        val ins = for (i <- 0 until par) yield new Looker(snap, i, step)
-
-        for (i <- ins) i.start()
-        for (i <- ins) i.join()
-      }
-    }
-  }
 }
+
 

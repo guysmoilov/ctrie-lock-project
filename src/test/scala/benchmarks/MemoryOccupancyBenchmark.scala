@@ -7,12 +7,24 @@ import Global._
 object CTrieMemoryOccupancyBenchmark extends Bench.LocalTime {
   import ctries2.ConcurrentTrie
 
-  val seeds: Gen[Int] = Gen.range("seed")(0, rep, 1)
-  val tries: Gen[ConcurrentTrie[Elem, Elem]] = for (seed <- seeds) yield new ConcurrentTrie[Elem, Elem]
+  var ct = new ConcurrentTrie[Elem, Elem]
+  val runs: Gen[Int] = Gen.single("run")(rep)
 
-  performance of "CTrieMemory" in {
+  override def defaultConfig: Context = Context(
+    exec.minWarmupRuns -> minWarmupRuns,            // minimum num of warmups
+    exec.benchRuns -> benchRuns,                    // desired num of measurements
+    exec.independentSamples -> independentSamples   // number of JVM instances
+  )
+
+  performance of "MemoryOccupancy" in {
     measure method "AfterDelete" in {
-      using(tries) in { ct =>
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test AfterDelete")
+      } afterTests {
+        if(debug) println("Finished AfterDelete")
+      } in { _ =>
         val e = elems
 
         for (i <- 0 until sz) ct.update(e(i), e(i))
@@ -22,11 +34,15 @@ object CTrieMemoryOccupancyBenchmark extends Bench.LocalTime {
         while (true) {}
       }
     }
-  }
 
-  performance of "CTrieMemory" in {
     measure method "Memory" in {
-      using(tries) in { ct =>
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test Memory")
+      } afterTests {
+        if(debug) println("Finished Memory")
+      } in { _ =>
         val e = elems
 
         for (i <- 0 until sz) ct.update(e(i), e(i))
@@ -42,12 +58,24 @@ object CTrieMemoryOccupancyBenchmark extends Bench.LocalTime {
 object CTrieLockMemoryOccupancyBenchmark extends Bench.LocalTime {
   import ctrielock.ConcurrentTrie
 
-  val seeds: Gen[Int] = Gen.range("seed")(0, rep, 1)
-  val tries: Gen[ConcurrentTrie[Elem, Elem]] = for (seed <- seeds) yield new ConcurrentTrie[Elem, Elem]
+  var ct = new ConcurrentTrie[Elem, Elem]
+  val runs: Gen[Int] = Gen.single("run")(rep)
 
-  performance of "CTrie" in {
+  override def defaultConfig: Context = Context(
+    exec.minWarmupRuns -> minWarmupRuns,            // minimum num of warmups
+    exec.benchRuns -> benchRuns,                    // desired num of measurements
+    exec.independentSamples -> independentSamples   // number of JVM instances
+  )
+
+  performance of "MemoryOccupancy" in {
     measure method "AfterDelete" in {
-      using(tries) in { ct =>
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test AfterDelete")
+      } afterTests {
+        if(debug) println("Finished AfterDelete")
+      } in { _ =>
         val e = elems
 
         for (i <- 0 until sz) ct.update(e(i), e(i))
@@ -57,11 +85,15 @@ object CTrieLockMemoryOccupancyBenchmark extends Bench.LocalTime {
         while (true) {}
       }
     }
-  }
 
-  performance of "CTrie" in {
     measure method "Memory" in {
-      using(tries) in { ct =>
+      using(runs) setUp { _ =>
+        ct = new ConcurrentTrie[Elem, Elem]
+      } beforeTests {
+        if(debug) println("Starting test Memory")
+      } afterTests {
+        if(debug) println("Finished Memory")
+      } in { _ =>
         val e = elems
 
         for (i <- 0 until sz) ct.update(e(i), e(i))
