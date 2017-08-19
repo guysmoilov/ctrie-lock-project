@@ -815,6 +815,7 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
       // Only clean if the removal we just performed caused us to become a TNode.
       READ_MAIN() match {
         case tn: TNode[K,V] => cleanParent(tn)
+        case _ => //NOP
       }
 
       // After cleanup, we still need to return the actual value we removed.
