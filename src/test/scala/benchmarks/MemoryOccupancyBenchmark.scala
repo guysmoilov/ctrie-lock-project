@@ -17,7 +17,7 @@ object CTrieMemoryOccupancyBenchmark extends Bench.OfflineReport {
   )
   override def executor = SeparateJvmsExecutor(
     new Executor.Warmer.Default,
-    Aggregator.min,
+    Aggregator.average,
     new Measurer.Default)
   override def persistor: Persistor.None.type = Persistor.None
 
@@ -83,7 +83,7 @@ object CTrieLockMemoryOccupancyBenchmark extends Bench.OfflineReport {
   )
   override def executor = SeparateJvmsExecutor(
     new Executor.Warmer.Default,
-    Aggregator.min,
+    Aggregator.average,
     new Measurer.Default)
   override def persistor: Persistor.None.type = Persistor.None
 
