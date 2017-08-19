@@ -25,6 +25,8 @@ object Global {
   val minWarmupRuns=500
   val benchRuns=20
   val independentSamples=1
+  val embedDsv=false
+  val jvmParams=List("-Xmx1024m", "-Xms1024m", "-XX:CompileThreshold=100")
   val sz=5000//: Int = System.getProperty("sz").toInt
   val par=4//: Int = Option(System.getProperty("par")).map(_.toInt).get
   val lookups=4 //: Int = Option(System.getProperty("lookups")).map(_.toInt).get
