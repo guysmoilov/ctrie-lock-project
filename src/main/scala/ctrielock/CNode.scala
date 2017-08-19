@@ -111,7 +111,7 @@ extends MainNode[K, V] {
     new CNode[K, V](bmp, tmparray, gen).toContracted(lev)
   }
 
-  private[ctrielock] def string(lev: Int): String = "CNode %x\n%s".format(bitmap, array.map(_.string(lev + 1)).mkString("\n"))
+  private[ctrielock] def string(lev: Int): String = "CNode.%s %x\n%s".format(gen, bitmap, array.map(_.string(lev + 1)).mkString("\n"))
 
   /* quiescently consistent - don't call concurrently to anything involving a GCAS!! */
   protected def collectElems: Seq[(K, V)] = array flatMap {

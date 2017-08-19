@@ -838,13 +838,15 @@ final class INode[K, V](bn: MainNode[K, V], val gen: Gen) extends BasicNode {
   }
 
   /* this is a quiescent method! */
-  def string(lev: Int) = "%sINode -> %s".format("  " * lev, READ_MAIN() match {
-    case null => "<null>"
-    case tn: TNode[_, _] => "TNode(%s, %s, %d, !)".format(tn.k, tn.v, tn.hc)
-    case cn: CNode[_, _] => cn.string(lev)
-    case ln: LNode[_, _] => ln.string(lev)
-    case x => "<elem: %s>".format(x)
-  })
+  def string(lev: Int) =
+    "%sINode.%s -> %s".format("  " * lev, gen,
+      READ_MAIN() match {
+        case null => "<null>"
+        case tn: TNode[_, _] => "TNode(%s, %s, %d, !)".format(tn.k, tn.v, tn.hc)
+        case cn: CNode[_, _] => cn.string(lev)
+        case ln: LNode[_, _] => ln.string(lev)
+        case x => "<elem: %s>".format(x)
+      })
 }
 
 object INode {
