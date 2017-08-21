@@ -1,9 +1,8 @@
-package test.scala.benchmarks
+package benchmarks
 
-
+import benchmarks.Global._
 import org.scalameter.api._
 import org.scalameter.picklers.noPickler._
-import test.scala.benchmarks.Global._
 
 
 object CTrieSnapshotBenchmark extends Bench.OfflineReport {

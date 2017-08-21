@@ -1,8 +1,8 @@
-package test.scala.benchmarks
+package benchmarks
 
 import org.scalameter.api._
 import org.scalameter.picklers.noPickler._
-import test.scala.benchmarks.Global._
+import benchmarks.Global._
 
 
 object CTrieFixedLookupInsertsBenchmark extends Bench.OfflineReport {

@@ -1,7 +1,7 @@
 package test.scala.benchmarks
 
+import benchmarks.Global._
 import org.scalameter.api._
-import test.scala.benchmarks.Global._
 
 import scala.collection.parallel.{IterableSplitter, _}
 
