@@ -12,3 +12,7 @@ libraryDependencies += "com.storm-enroute" %% "scalameter" % "0.8.2" % "test"
 testFrameworks += new TestFramework("org.scalameter.ScalaMeterFramework")
 
 parallelExecution in Test := false
+
+scalaVersion := "2.10.6"
+
+fork in test := true

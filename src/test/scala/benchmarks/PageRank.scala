@@ -29,15 +29,14 @@ object CTriePageRankBenchmark extends Bench.LocalTime {
 
         for (i <- 0 until sz) ct.put(i, pages(i))
 
-        val d = damping.get
-        val epsilon = d / sz / 1000
+        val epsilon = damping / sz / 1000
         var iter = 0
         while (ct.nonEmpty) {
           val (last, next) = if (iter % 2 == 0) (prob1, prob2) else (prob2, prob1)
           for ((name, page) <- ct) {
             var sum = 0.0
             for (pind <- page.incoming) sum += last(pind) / pages(pind).linksnum
-            next(name) = (1 - d) / sz + d * sum
+            next(name) = (1 - damping) / sz + damping * sum
             if (next(name) - last(name) < epsilon) ct.remove(name)
           }
           iter += 1
@@ -118,7 +117,7 @@ object CTriePageRankBenchmark extends Bench.LocalTime {
     // creates a set of pages with most links to initial pages
     def initialGauss(sz: Int) = {
       val pages = (for (i <- 0 until sz) yield {
-        val linknum = rand.nextInt(maxlinks.get)
+        val linknum = rand.nextInt(maxlinks)
         val outgoing = for (j <- 0 until linknum) yield {
           val lnk = (math.abs(rand.nextGaussian() / 4) * sz) max 0 min (sz - 1)
           lnk.toInt
@@ -133,9 +132,9 @@ object CTriePageRankBenchmark extends Bench.LocalTime {
 
     def groups(sz: Int) = {
       val pages = (for (i <- 0 until sz) yield {
-        val linknum = rand.nextInt(maxlinks.get)
+        val linknum = rand.nextInt(maxlinks)
         val outgoing = for (j <- 0 until linknum) yield {
-          val lnk = (rand.nextGaussian() * maxlinks.get + i) max 0 min (sz - 1)
+          val lnk = (rand.nextGaussian() * maxlinks + i) max 0 min (sz - 1)
           lnk.toInt
         }
         Page(i, linknum, outgoing.toArray, null)
@@ -148,18 +147,18 @@ object CTriePageRankBenchmark extends Bench.LocalTime {
 
     def nonUniform(sz: Int) = {
       val pages = (for (i <- 0 until sz) yield {
-        val linknum = rand.nextInt(maxlinks.get)
-        val group = (i / maxlinks.get) * maxlinks.get
+        val linknum = rand.nextInt(maxlinks)
+        val group = (i / maxlinks) * maxlinks
         val linksin = for (j <- 0 until linknum) yield {
-          val lnk = (rand.nextGaussian() * maxlinks.get + group) max 0 min (sz - 1)
+          val lnk = (rand.nextGaussian() * maxlinks + group) max 0 min (sz - 1)
           lnk.toInt
         }
         val linksprev = for (j <- 0 until linknum) yield {
-          val lnk = (rand.nextGaussian() * maxlinks.get + group - maxlinks.get) max 0 min (sz - 1)
+          val lnk = (rand.nextGaussian() * maxlinks + group - maxlinks) max 0 min (sz - 1)
           lnk.toInt
         }
         val linkshalf = for (j <- 0 until linknum) yield {
-          val lnk = (rand.nextGaussian() * maxlinks.get + group / 2) max 0 min (sz - 1)
+          val lnk = (rand.nextGaussian() * maxlinks + group / 2) max 0 min (sz - 1)
           lnk.toInt
         }
         Page(i, linknum, (linksin ++ linksprev ++ linkshalf).toArray, null)
@@ -170,7 +169,7 @@ object CTriePageRankBenchmark extends Bench.LocalTime {
       pages
     }
 
-    def pages(sz: Int) = pagegenerator.get match {
+    def pages(sz: Int) = pagegenerator match {
       case "gauss-init" => initialGauss(sz)
       case "groups" => groups(sz)
       case "non-uniform" => nonUniform(sz)
@@ -178,5 +177,4 @@ object CTriePageRankBenchmark extends Bench.LocalTime {
   }
 
 }
-
 */

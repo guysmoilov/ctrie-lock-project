@@ -21,7 +21,7 @@ case class Elem(i: Int) extends Comparable[Elem] {
 
 object Global {
   // run example: bench -Dsz=500000 -Dpar=4 ctries.MultiInsertCtrie2 6 1
-  val rep=100
+  val rep=100000
   val minWarmupRuns=1000
   val benchRuns=20
   val independentSamples=1
@@ -40,6 +40,8 @@ object Global {
   val updateFilled: Boolean = Option(System.getProperty("updateFilled")).map(_.toBoolean).getOrElse(false)
   val debug: Boolean = Option(System.getProperty("debug")).map(_.toBoolean).getOrElse(true)
   val elems: Array[Elem] = (for (i <- 0 until (sz * 2)) yield Elem(i)).toArray
+
+  println(s"Running test with $par threads for $rep times and $sz elemets")
 }
 
 
