@@ -1,4 +1,4 @@
-package ctries2
+package ctrielock
 
 
 
@@ -11,7 +11,7 @@ import scala.annotation.tailrec
 
 class CtrieSpec extends WordSpec with Matchers {
   
-  "A ctrie2" should {
+  "A ctrielock" should {
     
     "be created" in {
       val ct = new ConcurrentTrie

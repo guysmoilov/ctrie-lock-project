@@ -1,4 +1,4 @@
-package ctries2
+package ctrielock
 
 
 
@@ -11,7 +11,7 @@ import scala.collection._
 
 class SnapshotSpec extends WordSpec with Matchers {
   
-  "A ctrie2" should {
+  "A ctrielock" should {
     
     "support snapshots" in {
       val ctn = new ConcurrentTrie

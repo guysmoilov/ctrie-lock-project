@@ -1,4 +1,4 @@
-package ctries2
+package ctrielock
 
 
 
@@ -11,7 +11,7 @@ class LNodeSpec extends WordSpec with Matchers {
   val initsz = 1500
   val secondsz = 1750
   
-  "A ctrie2" should {
+  "A ctrielock" should {
     
     "accept elements with the same hash codes" in {
       val ct = new ConcurrentTrie[DumbHash, Int]

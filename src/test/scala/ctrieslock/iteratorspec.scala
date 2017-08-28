@@ -1,4 +1,4 @@
-package ctries2
+package ctrielock
 
 
 
@@ -9,7 +9,7 @@ import collection._
 
 class IteratorSpec extends WordSpec with Matchers {
   
-  "A ctrie2 iterator" should {
+  "A ctrielock iterator" should {
     
     "work for an empty trie" in {
       val ct = new ConcurrentTrie

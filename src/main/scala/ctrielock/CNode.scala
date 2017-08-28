@@ -8,6 +8,27 @@ package ctrielock
 final class CNode[K, V](final val bitmap: Int, final val array: Array[BasicNode], final val gen: Gen)
 extends MainNode[K, V] {
 
+  /**
+    * @return (does the given hash exist in this CNode,
+    *         the flag for the hash in the bitmap,
+    *         the position of the target node in the CNode's array (meaningless if not found!) )
+    */
+  final def findPositions(hc: Int, lev: Int) : (Boolean,Int,Int) = {
+    val idx = (hc >>> lev) & 0x1f
+    val flag = 1 << idx
+    val mask = flag - 1
+    val pos = Integer.bitCount(bitmap & mask)
+    val wasFound = (bitmap & flag) != 0
+    (wasFound, flag, pos)
+  }
+
+  final def getElementAt(hc: Int, lev: Int): Option[BasicNode] = {
+    val (wasFound,flag,pos) = findPositions(hc,lev)
+    if (wasFound)
+      Option(array(pos))
+    else None
+  }
+
   final def updatedAt(pos: Int, nn: BasicNode, gen: Gen) = {
     val len = array.length
     val narr = new Array[BasicNode](len)
@@ -38,7 +59,7 @@ extends MainNode[K, V] {
   /** Returns a copy of this cnode such that all the i-nodes below it are copied
    *  to the specified generation `ngen`.
    */
-  final def renewed(ngen: Gen, ct: ConcurrentTrie[K, V]) = {
+  final def renewed(ngen: Gen) = {
     var i = 0
     val arr = array
     val len = arr.length
@@ -69,7 +90,7 @@ extends MainNode[K, V] {
   //   returns the version of this node with at least some null-inodes
   //   removed (those existing when the op began)
   // - if there are only null-i-nodes below, returns null
-  final def toCompressed(ct: ConcurrentTrie[K, V], lev: Int, gen: Gen) = {
+  final def toCompressed(lev: Int, gen: Gen) = {
     var bmp = bitmap
     var i = 0
     val arr = array
@@ -90,12 +111,12 @@ extends MainNode[K, V] {
     new CNode[K, V](bmp, tmparray, gen).toContracted(lev)
   }
 
-  private[ctrielock] def string(lev: Int): String = "CNode %x\n%s".format(bitmap, array.map(_.string(lev + 1)).mkString("\n"))
+  private[ctrielock] def string(lev: Int): String = "CNode.%s %x\n%s".format(gen, bitmap, array.map(_.string(lev + 1)).mkString("\n"))
 
   /* quiescently consistent - don't call concurrently to anything involving a GCAS!! */
   protected def collectElems: Seq[(K, V)] = array flatMap {
     case sn: SNode[K, V] => Some(sn.kvPair)
-    case in: INode[K, V] => in.mainnode match {
+    case in: INode[K, V] => in.READ_MAIN() match {
       case tn: TNode[K, V] => Some(tn.kvPair)
       case ln: LNode[K, V] => ln.listmap.toList
       case cn: CNode[K, V] => cn.collectElems

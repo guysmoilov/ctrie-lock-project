@@ -35,11 +35,9 @@ extends mutable.ConcurrentMap[K, V] {
     else ret
   }
 
-  @tailrec private def lookuphc(k: K, hc: Int): AnyRef = {
+  private def lookuphc(k: K, hc: Int): AnyRef = {
     val r = READ_ROOT()
-    val res = r.rec_lookup(k, hc, 0, null, r.gen, this)
-    if (res eq INode.RESTART) lookuphc(k, hc)
-    else res
+    return r.rec_lookup(k, hc, 0, null)
   }
 
   @tailrec private def removehc(k: K, v: V, hc: Int): Option[V] = {
@@ -156,11 +154,28 @@ extends mutable.ConcurrentMap[K, V] {
 
   // Forced to add these by the compiler, probably added in a newer version of scala
   override def toArray[A1 >: (K, V)](implicit evidence$1: ClassManifest[A1]): Array[A1] = toArray
-  override def toIndexedSeq[A1 >: (K, V)]: immutable.IndexedSeq[A1] = null
+//  override def toIndexedSeq[A1 >: (K, V)]: immutable.IndexedSeq[A1] = null
 }
 
 object ConcurrentTrie {
   @inline final def computeHash[K](k: K): Int = {
     k.hashCode
+  }
+}
+
+private[ctrielock] object Debug {
+  import collection._
+
+  lazy val logbuffer = new java.util.concurrent.ConcurrentLinkedQueue[AnyRef]
+
+  def log(s: AnyRef) = logbuffer.add(s)
+
+  def flush() {
+    for (s <- JavaConversions.asScalaIterator(logbuffer.iterator())) Console.out.println(s.toString)
+    logbuffer.clear()
+  }
+
+  def clear() {
+    logbuffer.clear()
   }
 }

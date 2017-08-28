@@ -1,4 +1,4 @@
-package ctries2
+package ctrielock
 
 
 import org.scalatest._
@@ -9,7 +9,7 @@ class ConcurrentMapSpec extends WordSpec with Matchers {
   val initsz = 1500
   val secondsz = 2000
   
-  "A ctrie2" should {
+  "A ctrielock" should {
     
     "support put" in {
       val ct = new ConcurrentTrie[Wrap, Int]
