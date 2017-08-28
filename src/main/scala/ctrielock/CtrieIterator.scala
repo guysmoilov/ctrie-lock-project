@@ -1,6 +1,6 @@
 package ctrielock
 
-import scala.collection.{GenMap}
+import scala.collection.immutable
 
 /**
   * <p>
@@ -113,6 +113,5 @@ class CtrieIterator[K, V](ct: ConcurrentTrie[K, V], mustInit: Boolean = true)
 
   // Forced to add these by the compiler, probably added in a newer version of scala
   override def toArray[A1 >: (K, V)](implicit evidence$1: ClassManifest[A1]): Array[A1] = toArray
-
-  override def toMap[K, V](implicit ev: <:<[(K, V), (K, V)]): GenMap[K, V] = ??? // TODO: implement
+  override def toIndexedSeq[A1 >: (K, V)]: immutable.IndexedSeq[A1] = null
 }
